@@ -35,29 +35,42 @@
     repayment_plan: { id: 301, title: "同棲初期費用", original_amount: 300000, remaining_amount: 180000, monthly_amount: 20000, lender: "me", borrower: "partner" }
   };
 
-  async function table(name, select) {
-    var query = client.from(name).select(select || "*");
-    var result = await query;
-    if (result.error) throw result.error;
-    return result.data || [];
+  function categoryName(row) {
+    return row && row.categories ? row.categories.name : null;
   }
 
   async function getInitialData() {
     if (!client) return JSON.parse(JSON.stringify(mock));
     try {
       var results = await Promise.all([
-        table("categories"),
-        table("merchant_rules_view"),
-        table("transactions_view"),
-        table("loans"),
-        table("repayment_plans")
+        client.from("categories").select("id,name,icon").eq("is_demo", true).order("id"),
+        client.from("merchant_rules").select("id,merchant_name,scope,mode,categories(name)").eq("is_demo", true).order("id"),
+        client.from("transactions").select("id,transaction_date,merchant_name,merchant_raw,amount,scope,payer,status,source,memo,categories(name)").eq("is_demo", true).order("transaction_date", { ascending: false }),
+        client.from("loans").select("id,loan_date,description,amount,lender,borrower,status,memo").eq("is_demo", true).order("loan_date", { ascending: false }),
+        client.from("repayment_plans").select("id,title,original_amount,remaining_amount,monthly_amount,lender,borrower").eq("is_demo", true).order("id").limit(1)
       ]);
+
+      results.forEach(function (r) { if (r.error) throw r.error; });
+
       return {
-        categories: results[0],
-        merchant_rules: results[1],
-        transactions: results[2],
-        loans: results[3],
-        repayment_plan: results[4][0] || null
+        categories: results[0].data || [],
+        merchant_rules: (results[1].data || []).map(function (r) {
+          return { id:r.id, merchant_name:r.merchant_name, category_name:categoryName(r), scope:r.scope, mode:r.mode };
+        }),
+        transactions: (results[2].data || []).map(function (t) {
+          return {
+            id:t.id, date:t.transaction_date, merchant_name:t.merchant_name, merchant_raw:t.merchant_raw,
+            amount:t.amount, category_name:categoryName(t), scope:t.scope, payer:t.payer,
+            status:t.status, source:t.source, memo:t.memo
+          };
+        }),
+        loans: (results[3].data || []).map(function (x) {
+          return {
+            id:x.id, date:x.loan_date, description:x.description, amount:x.amount,
+            lender:x.lender, borrower:x.borrower, status:x.status, memo:x.memo
+          };
+        }),
+        repayment_plan: (results[4].data || [])[0] || null
       };
     } catch (error) {
       console.error("Supabase load failed; falling back to mock data.", error);
@@ -66,36 +79,44 @@
     }
   }
 
-  async function classifyTransaction(id, categoryName, scope, rememberMerchant) {
+  async function classifyTransaction(id, categoryNameValue, scope, rememberMerchant) {
     if (!client) return { mock: true };
-    var categoryResult = await client.from("categories").select("id").eq("name", categoryName).limit(1);
+
+    var categoryResult = await client.from("categories")
+      .select("id").eq("name", categoryNameValue).eq("is_demo", true).limit(1);
     if (categoryResult.error) throw categoryResult.error;
     var categoryId = categoryResult.data[0] ? categoryResult.data[0].id : null;
 
     var updateResult = await client.from("transactions")
       .update({ category_id: categoryId, scope: scope, status: "confirmed" })
-      .eq("id", id);
+      .eq("id", id).eq("is_demo", true);
     if (updateResult.error) throw updateResult.error;
 
     if (rememberMerchant) {
-      var txResult = await client.from("transactions").select("merchant_name").eq("id", id).limit(1);
+      var txResult = await client.from("transactions")
+        .select("merchant_name").eq("id", id).eq("is_demo", true).limit(1);
       if (txResult.error) throw txResult.error;
+
       if (txResult.data[0]) {
         var ruleResult = await client.from("merchant_rules").insert({
           merchant_name: txResult.data[0].merchant_name,
           category_id: categoryId,
           scope: scope,
-          mode: "auto"
+          mode: "auto",
+          is_demo: true
         });
-        if (ruleResult.error) console.warn(ruleResult.error);
+        if (ruleResult.error) throw ruleResult.error;
       }
     }
+
     return { mock: false };
   }
 
   async function updateRepaymentAmount(planId, amount) {
     if (!client) return { mock: true };
-    var result = await client.from("repayment_plans").update({ monthly_amount: amount }).eq("id", planId);
+    var result = await client.from("repayment_plans")
+      .update({ monthly_amount: amount })
+      .eq("id", planId).eq("is_demo", true);
     if (result.error) throw result.error;
     return { mock: false };
   }
