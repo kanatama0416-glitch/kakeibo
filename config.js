@@ -1,7 +1,7 @@
-// Supabase接続後に値を設定します。
-// anon key はブラウザ公開前提のキーです。service_role key は絶対に置かないでください。
+// Supabase browser client configuration.
+// This is a publishable key, safe to use in a browser. Never put a secret/service_role key here.
 window.KAKEIBO_CONFIG = {
-  supabaseUrl: "",
-  supabaseAnonKey: "",
+  supabaseUrl: "https://vcokmkljwxuyiytiqtlc.supabase.co",
+  supabaseAnonKey: "sb_publishable_Ww13dYot4RnKABa3HKUDkQ_50tLWmqa",
   useMockDataWhenDisconnected: true
 };
