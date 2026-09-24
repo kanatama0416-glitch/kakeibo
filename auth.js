@@ -55,7 +55,9 @@
       loginButton.disabled = false;
 
       var text = String(error && error.message ? error.message : error);
-      if (/redirect|not allowed/i.test(text)) {
+      if (/rate limit|429|too many/i.test(text)) {
+        setMessage("短時間に何度か送信したため、いまはログインメールを再送できません。少し時間をおいてからもう一度試してください。");
+      } else if (/redirect|not allowed/i.test(text)) {
         setMessage("ログイン先URLの設定がまだ必要です。");
       } else {
         setMessage("ログインメールを送れませんでした。もう一度試してください。");
