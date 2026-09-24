@@ -1,5 +1,5 @@
 (function () {
-  var state = { data: null, filter: "all", currentClassifyId: null };
+  var state = { data: null, filter: "all", currentClassifyId: null, started: false };
 
   function yen(value) {
     return "¥" + Number(value || 0).toLocaleString("ja-JP");
@@ -285,12 +285,29 @@
     setTimeout(render, 0);
   });
 
-  window.kakeiboDb.getInitialData().then(function (data) {
-    state.data = data;
-    render();
-  }).catch(function (error) {
-    console.error(error);
-    document.querySelector("main").innerHTML =
-      '<div class="info-box">データの読み込みに失敗しました。</div>';
-  });
+  async function start() {
+    if (state.started) return;
+    state.started = true;
+
+    try {
+      state.data = await window.kakeiboDb.getInitialData();
+      render();
+    } catch (error) {
+      state.started = false;
+      console.error(error);
+      throw error;
+    }
+  }
+
+  function reset() {
+    state.data = null;
+    state.started = false;
+    state.filter = "all";
+    state.currentClassifyId = null;
+  }
+
+  window.KakeiboApp = {
+    start: start,
+    reset: reset
+  };
 })();
