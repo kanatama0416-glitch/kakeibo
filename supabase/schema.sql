@@ -107,3 +107,9 @@ create policy "demo repayment plans update" on public.repayment_plans
   for update to anon using (is_demo = true) with check (is_demo = true);
 create policy "demo repayments select" on public.repayments
   for select to anon using (is_demo = true);
+
+
+-- Foreign-key indexes
+create index if not exists merchant_rules_category_id_idx on public.merchant_rules(category_id);
+create index if not exists transactions_category_id_idx on public.transactions(category_id);
+create index if not exists repayments_repayment_plan_id_idx on public.repayments(repayment_plan_id);
