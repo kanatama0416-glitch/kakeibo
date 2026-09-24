@@ -13,11 +13,13 @@
       <div class="auth-lock">🔐</div>
       <p class="eyebrow">PRIVATE KAKEIBO</p>
       <h1>ふたり家計</h1>
-      <p class="auth-copy">この家計簿は非公開です。許可されたGoogleアカウントでログインしてください。</p>
-      <button id="googleLoginButton" class="google-login" type="button">
-        <span class="google-mark">G</span>
-        Googleでログイン
-      </button>
+      <p class="auth-copy">この家計簿は非公開です。許可されたメールアドレスだけログインできます。</p>
+      <form id="emailLoginForm" class="email-login-form">
+        <label for="loginEmail">メールアドレス</label>
+        <input id="loginEmail" type="email" autocomplete="email" placeholder="name@example.com" required>
+        <button id="emailLoginButton" class="email-login-button" type="submit">ログインリンクを送る</button>
+      </form>
+      <p class="auth-help">届いたメールのリンクを押すだけでログインできます。</p>
       <p id="authMessage" class="auth-message"></p>
     </div>
   </section>
