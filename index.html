@@ -8,13 +8,30 @@
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
-  <div class="app-shell">
+  <section id="authGate" class="auth-gate">
+    <div class="auth-card">
+      <div class="auth-lock">🔐</div>
+      <p class="eyebrow">PRIVATE KAKEIBO</p>
+      <h1>ふたり家計</h1>
+      <p class="auth-copy">この家計簿は非公開です。許可されたGoogleアカウントでログインしてください。</p>
+      <button id="googleLoginButton" class="google-login" type="button">
+        <span class="google-mark">G</span>
+        Googleでログイン
+      </button>
+      <p id="authMessage" class="auth-message"></p>
+    </div>
+  </section>
+
+  <div id="appShell" class="app-shell hidden">
     <header class="topbar">
       <div>
         <p class="eyebrow">Kakeibo</p>
         <h1>ふたり家計</h1>
       </div>
-      <button class="month-pill" type="button">2026年9月 ▾</button>
+      <div class="header-actions">
+        <button class="month-pill" type="button">2026年9月 ▾</button>
+        <button id="logoutButton" class="logout-button" type="button">ログアウト</button>
+      </div>
     </header>
 
     <main>
@@ -194,5 +211,6 @@
   <script src="./config.js"></script>
   <script src="./supabase-client.js"></script>
   <script src="./app.js"></script>
+  <script src="./auth.js"></script>
 </body>
 </html>
