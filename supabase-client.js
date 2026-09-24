@@ -26,11 +26,14 @@
     return result.data.session;
   }
 
-  async function signInWithGoogle() {
+  async function signInWithEmail(email) {
     var redirectTo = window.location.origin + window.location.pathname;
-    var result = await client.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: redirectTo }
+    var result = await client.auth.signInWithOtp({
+      email: email,
+      options: {
+        emailRedirectTo: redirectTo,
+        shouldCreateUser: true
+      }
     });
     if (result.error) throw result.error;
     return result.data;
@@ -166,7 +169,7 @@
   window.kakeiboDb = {
     client: client,
     getSession: getSession,
-    signInWithGoogle: signInWithGoogle,
+    signInWithEmail: signInWithEmail,
     signOut: signOut,
     onAuthStateChange: onAuthStateChange,
     checkAccess: checkAccess,
