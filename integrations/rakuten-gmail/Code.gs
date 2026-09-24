@@ -6,7 +6,9 @@
  * 2. このファイルを Code.gs に貼り付ける
  * 3. Project Settings > Script Properties に
  *    RAKUTEN_IMPORT_TOKEN を登録する
- * 4. setupHourlyTrigger() を1回実行し、Gmail/外部通信を許可する
+ * 4. testLatestRakutenMail() を実行
+ * 5. syncRakutenCardEmails() を実行
+ * 6. setupHourlyTrigger() を1回実行
  *
  * 注意:
  * - 速報版は店舗名がないため取り込みません。
@@ -16,7 +18,7 @@
 
 const SUPABASE_URL = 'https://vcokmkljwxuyiytiqtlc.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_Ww13dYot4RnKABa3HKUDkQ_50tLWmqa';
-const IMPORT_RPC = '/rest/v1/rpc/import_rakuten_transactions';
+const IMPORT_ENDPOINT = '/functions/v1/import-rakuten-gmail';
 
 const RAKUTEN_SENDER = 'info@mail.rakuten-card.co.jp';
 const RAKUTEN_CONFIRMED_SUBJECT = 'カード利用のお知らせ(本人ご利用分)';
@@ -64,19 +66,19 @@ function syncRakutenCardEmails() {
   });
 
   if (items.length === 0) {
-    console.log('新しい楽天カード確定明細はありません。');
+    console.log('楽天カード確定明細はありません。');
     return { inserted: 0, parsed: 0 };
   }
 
-  const response = UrlFetchApp.fetch(SUPABASE_URL + IMPORT_RPC, {
+  const response = UrlFetchApp.fetch(SUPABASE_URL + IMPORT_ENDPOINT, {
     method: 'post',
     contentType: 'application/json',
     headers: {
-      apikey: SUPABASE_PUBLISHABLE_KEY
+      apikey: SUPABASE_PUBLISHABLE_KEY,
+      'x-import-token': token
     },
     payload: JSON.stringify({
-      p_token: token,
-      p_items: items
+      items: items
     }),
     muteHttpExceptions: true
   });
@@ -90,19 +92,20 @@ function syncRakutenCardEmails() {
 
   const result = body ? JSON.parse(body) : { inserted: 0 };
 
-  // 取込成功後のみラベルを付与。メール自体は既読化・移動しません。
-  const label = GmailApp.getUserLabelByName(PROCESSED_LABEL) || GmailApp.createLabel(PROCESSED_LABEL);
+  // 成功後のみラベルを付与。既読化・アーカイブはしません。
+  const label =
+    GmailApp.getUserLabelByName(PROCESSED_LABEL) ||
+    GmailApp.createLabel(PROCESSED_LABEL);
+
   processedThreads.forEach(thread => thread.addLabel(label));
 
-  console.log(JSON.stringify({
-    parsed: items.length,
-    inserted: result.inserted || 0
-  }));
-
-  return {
-    parsed: items.length,
+  const summary = {
+    parsed: result.parsed || items.length,
     inserted: result.inserted || 0
   };
+
+  console.log(JSON.stringify(summary));
+  return summary;
 }
 
 function parseRakutenConfirmedMail_(body, messageId, receivedDate) {
@@ -145,7 +148,6 @@ function parseRakutenConfirmedMail_(body, messageId, receivedDate) {
 }
 
 function setupHourlyTrigger() {
-  // 二重作成を避ける
   ScriptApp.getProjectTriggers()
     .filter(t => t.getHandlerFunction() === 'syncRakutenCardEmails')
     .forEach(t => ScriptApp.deleteTrigger(t));
