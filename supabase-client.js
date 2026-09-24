@@ -47,8 +47,8 @@
     try {
       var results = await Promise.all([
         table("categories"),
-        table("merchant_rules"),
-        table("transactions"),
+        table("merchant_rules_view"),
+        table("transactions_view"),
         table("loans"),
         table("repayment_plans")
       ]);
