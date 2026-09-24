@@ -82,3 +82,12 @@ dialog{width:min(430px,calc(100% - 28px));border:0;border-radius:24px;padding:0;
 .auth-message{min-height:18px;margin:12px 0 0;color:#a43b35;font-size:12px;line-height:1.5}
 .header-actions{display:flex;align-items:center;gap:7px}
 .logout-button{border:0;background:transparent;color:var(--muted);font-size:10px;font-weight:900;padding:8px 2px}
+
+.email-login-form{display:flex;flex-direction:column;gap:9px;text-align:left}
+.email-login-form label{font-size:12px;font-weight:900;color:var(--muted);padding-left:2px}
+.email-login-form input{width:100%;border:1px solid var(--line);border-radius:15px;padding:13px 14px;background:#fff;color:var(--text);outline:none}
+.email-login-form input:focus{border-color:#97bea9;box-shadow:0 0 0 3px rgba(31,122,90,.08)}
+.email-login-button{width:100%;border:0;background:var(--text);color:#fff;border-radius:15px;padding:13px 16px;font-weight:900;box-shadow:var(--shadow)}
+.email-login-button:disabled{opacity:.55;cursor:default}
+.auth-help{margin:10px 0 0;color:var(--muted);font-size:11px;line-height:1.5}
+.auth-message.success{color:var(--green)}
