@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f6f7f9">
+  <title>ふたり家計</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Kakeibo</p>
+        <h1>ふたり家計</h1>
+      </div>
+      <button class="month-pill" type="button">2026年9月 ▾</button>
+    </header>
+
+    <main>
+      <section class="screen active" data-screen="home">
+        <article class="settlement-card">
+          <p>今月の最終精算</p>
+          <h2 id="settlementAmount">¥64,500</h2>
+          <div class="settlement-direction" id="settlementDirection">彼氏 → あなたへ支払い</div>
+          <p class="settlement-note">生活費・返済・立替をまとめた金額です。</p>
+          <button class="white-button" type="button" data-open="breakdownDialog">内訳を見る</button>
+        </article>
+
+        <div class="metrics-grid">
+          <article class="metric-card">
+            <span>今月の生活費</span>
+            <strong id="monthlyTotal">¥84,260</strong>
+            <small>共同生活費のみ</small>
+          </article>
+          <article class="metric-card">
+            <span>今月の返済</span>
+            <strong id="monthlyRepayment">¥20,000</strong>
+            <small id="remainingDebt">残り ¥180,000</small>
+          </article>
+        </div>
+
+        <h3 class="section-title">今月の負担</h3>
+        <article class="split-card">
+          <div><span>あなた</span><strong id="myShare">¥42,130</strong></div>
+          <span class="swap">↔</span>
+          <div><span>彼氏</span><strong id="partnerShare">¥42,130</strong></div>
+        </article>
+
+        <button class="attention-card" type="button" data-go="unknown">
+          <span class="attention-icon">?</span>
+          <span>
+            <strong id="unknownCountText">未分類が2件あります</strong>
+            <small>店舗や費目を確認してください</small>
+          </span>
+          <b>›</b>
+        </button>
+
+        <div class="section-head">
+          <h3 class="section-title">今月の支出</h3>
+          <button type="button" class="text-button" data-go="transactions">すべて見る</button>
+        </div>
+        <div id="recentTransactions" class="transaction-list"></div>
+      </section>
+
+      <section class="screen" data-screen="transactions">
+        <div class="page-heading">
+          <h2>明細</h2>
+          <p>生活費と個人支出をまとめて確認</p>
+        </div>
+        <div class="chips">
+          <button class="chip active" data-filter="all">すべて</button>
+          <button class="chip" data-filter="shared">共同</button>
+          <button class="chip" data-filter="mine">あなた</button>
+          <button class="chip" data-filter="partner">彼氏</button>
+        </div>
+        <div id="allTransactions" class="transaction-list"></div>
+      </section>
+
+      <section class="screen" data-screen="unknown">
+        <div class="page-heading">
+          <h2>未分類</h2>
+          <p>わからないものだけ後から確認</p>
+        </div>
+        <div class="info-box">自信がない明細は無理に分類せず、ここに残します。</div>
+        <div id="unknownTransactions" class="unknown-list"></div>
+      </section>
+
+      <section class="screen" data-screen="money">
+        <div class="page-heading">
+          <h2>貸借・返済</h2>
+          <p>生活費とは分けて、お金のやりとりを管理</p>
+        </div>
+
+        <article class="metric-card wide">
+          <span>現在の貸し借り差額</span>
+          <strong id="loanBalance">彼氏 → あなた ¥6,500</strong>
+          <small>未精算の立替のみ</small>
+        </article>
+
+        <h3 class="section-title">未精算の立替</h3>
+        <div id="loansList" class="transaction-list"></div>
+
+        <h3 class="section-title">初期費用の返済</h3>
+        <article class="debt-card">
+          <div class="debt-top">
+            <div><span>残り</span><strong id="debtRemaining">¥180,000</strong></div>
+            <em id="repaymentBadge">今月 ¥20,000</em>
+          </div>
+          <div class="progress"><span id="debtProgress"></span></div>
+          <p id="debtMeta">総額 ¥300,000 ・ 返済済 ¥120,000</p>
+          <button class="soft-button" type="button" data-open="repaymentDialog">返済額を変更</button>
+        </article>
+      </section>
+
+      <section class="screen" data-screen="settings">
+        <div class="page-heading">
+          <h2>設定</h2>
+          <p>費目・店舗ルール・負担割合を管理</p>
+        </div>
+        <div class="settings-card">
+          <button type="button"><span><strong>共同費の基本負担</strong><small>あなた 50% / 彼氏 50%</small></span><b>›</b></button>
+          <button type="button"><span><strong>費目</strong><small>食費・日用品・光熱費など</small></span><b>›</b></button>
+          <button type="button"><span><strong>店舗ルール</strong><small>アルビス → 食費 など</small></span><b>›</b></button>
+        </div>
+
+        <h3 class="section-title">店舗ルール</h3>
+        <div id="merchantRules" class="transaction-list"></div>
+      </section>
+    </main>
+
+    <button class="fab" type="button" data-open="addDialog" aria-label="追加">＋</button>
+
+    <nav class="bottom-nav">
+      <button class="nav-item active" data-go="home"><span>⌂</span><small>ホーム</small></button>
+      <button class="nav-item" data-go="transactions"><span>≡</span><small>明細</small></button>
+      <button class="nav-item" data-go="unknown"><span>?</span><small>未分類</small></button>
+      <button class="nav-item" data-go="money"><span>↔</span><small>貸借・返済</small></button>
+      <button class="nav-item" data-go="settings"><span>⚙</span><small>設定</small></button>
+    </nav>
+  </div>
+
+  <dialog id="breakdownDialog">
+    <form method="dialog" class="dialog-card">
+      <div class="dialog-head"><h3>今月の精算内訳</h3><button>×</button></div>
+      <div id="breakdownList"></div>
+    </form>
+  </dialog>
+
+  <dialog id="classifyDialog">
+    <form method="dialog" class="dialog-card" id="classifyForm">
+      <div class="dialog-head"><h3 id="classifyTitle">明細を分類</h3><button>×</button></div>
+      <input type="hidden" id="classifyId">
+      <label>費目<select id="classifyCategory"></select></label>
+      <label>支出区分
+        <select id="classifyScope">
+          <option value="shared">共同生活費</option>
+          <option value="mine">あなた個人</option>
+          <option value="partner">彼氏個人</option>
+        </select>
+      </label>
+      <label>この設定
+        <select id="ruleMode">
+          <option value="once">今回だけ</option>
+          <option value="merchant">今後もこの店舗に適用</option>
+        </select>
+      </label>
+      <button class="primary-button" value="save">保存</button>
+    </form>
+  </dialog>
+
+  <dialog id="repaymentDialog">
+    <form method="dialog" class="dialog-card" id="repaymentForm">
+      <div class="dialog-head"><h3>今月の返済額</h3><button>×</button></div>
+      <label>返済額<input id="repaymentInput" type="number" min="0" step="1000" value="20000"></label>
+      <button class="primary-button" value="save">変更する</button>
+    </form>
+  </dialog>
+
+  <dialog id="addDialog">
+    <form method="dialog" class="dialog-card">
+      <div class="dialog-head"><h3>追加する</h3><button>×</button></div>
+      <div class="add-grid">
+        <button value="cancel">支出</button>
+        <button value="cancel">立替</button>
+        <button value="cancel">返済</button>
+        <button value="cancel">店舗ルール</button>
+      </div>
+      <p class="muted">登録フォームは次の実装で追加します。</p>
+    </form>
+  </dialog>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="./config.js"></script>
+  <script src="./supabase-client.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
