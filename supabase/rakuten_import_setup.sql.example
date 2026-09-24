@@ -1,0 +1,104 @@
+-- Live projectには適用済み。
+-- 再構築時は {{TOKEN_SHA256}} をランダムな取込トークンのSHA-256へ置き換えてください。
+
+alter table public.transactions
+  drop constraint if exists transactions_source_message_id_key;
+
+alter table public.transactions
+  drop constraint if exists transactions_source_check;
+
+alter table public.transactions
+  add constraint transactions_source_check
+  check (source in ('manual','epos_email','rakuten_email','csv'));
+
+alter table public.transactions
+  add column if not exists source_item_index integer not null default 0,
+  add column if not exists source_received_at timestamptz,
+  add column if not exists card_provider text,
+  add column if not exists card_label text;
+
+create unique index if not exists transactions_source_message_item_uidx
+  on public.transactions(source_message_id, source_item_index)
+  where source_message_id is not null;
+
+create schema if not exists private;
+
+create table if not exists private.import_tokens (
+  name text primary key,
+  token_hash text not null,
+  created_at timestamptz not null default now()
+);
+
+revoke all on schema private from public, anon, authenticated;
+revoke all on all tables in schema private from public, anon, authenticated;
+
+insert into private.import_tokens(name, token_hash)
+values ('rakuten_gmail', '{{TOKEN_SHA256}}')
+on conflict (name) do update set token_hash = excluded.token_hash;
+
+create or replace function public.import_rakuten_transactions(
+  p_token text,
+  p_items jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_catalog
+as $$
+declare
+  v_hash text;
+  v_inserted integer := 0;
+begin
+  select token_hash into v_hash
+  from private.import_tokens
+  where name = 'rakuten_gmail';
+
+  if v_hash is null
+     or encode(extensions.digest(p_token, 'sha256'), 'hex') <> v_hash then
+    raise exception 'unauthorized';
+  end if;
+
+  with incoming as (
+    select *
+    from jsonb_to_recordset(p_items) as x(
+      transaction_date date,
+      merchant_name text,
+      amount integer,
+      source_message_id text,
+      source_item_index integer,
+      source_received_at timestamptz,
+      card_label text
+    )
+  ),
+  inserted as (
+    insert into public.transactions (
+      transaction_date, merchant_name, merchant_raw, amount,
+      scope, payer, status, source,
+      source_message_id, source_item_index, source_received_at,
+      card_provider, card_label, is_demo
+    )
+    select
+      transaction_date, merchant_name, merchant_name, amount,
+      null, 'me', 'unclassified', 'rakuten_email',
+      source_message_id, coalesce(source_item_index, 0), source_received_at,
+      'rakuten', card_label, false
+    from incoming
+    where transaction_date is not null
+      and merchant_name is not null
+      and length(trim(merchant_name)) > 0
+      and amount is not null
+      and amount >= 0
+      and source_message_id is not null
+    on conflict (source_message_id, source_item_index)
+      where source_message_id is not null
+    do nothing
+    returning 1
+  )
+  select count(*) into v_inserted from inserted;
+
+  return jsonb_build_object('inserted', v_inserted);
+end;
+$$;
+
+revoke all on function public.import_rakuten_transactions(text, jsonb) from public;
+grant execute on function public.import_rakuten_transactions(text, jsonb) to anon, authenticated;
