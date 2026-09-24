@@ -1,0 +1,22 @@
+-- Public repo用テンプレート。実際の許可メールはSupabaseのprivateスキーマだけに保存します。
+-- {{ALLOWED_EMAIL}} を本番DB上でのみ置換してください。GitHubには実メールを書かないでください。
+
+create schema if not exists private;
+
+create table if not exists private.allowed_users (
+  email text primary key,
+  active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+revoke all on schema private from public, anon;
+revoke all on all tables in schema private from public, anon;
+grant usage on schema private to authenticated;
+grant select on private.allowed_users to authenticated;
+
+insert into private.allowed_users(email, active)
+values ('{{ALLOWED_EMAIL}}', true)
+on conflict (email) do update set active = excluded.active;
+
+-- public側の各家計テーブルでは、anon権限をrevokeし、
+-- authenticated + private.allowed_users一致時のみRLSで許可します。
