@@ -47,6 +47,13 @@
     return scope === "shared" ? "共同" : scope === "mine" ? "にゃち個人" : scope === "partner" ? "うー個人" : "未設定";
   }
 
+  function currentMeSharePercent() {
+    var settings = state.data && state.data.settings ? state.data.settings : null;
+    var value = settings ? Number(settings.me_share_percent) : 50;
+    if (!Number.isFinite(value) || value < 0 || value > 100) return 50;
+    return Math.round(value);
+  }
+
   function iconFor(tx) {
     var map = { "食費":"🛒", "日用品":"🧴", "光熱費":"💡", "外食":"☕", "家具・家電":"🪑" };
     return map[tx.category_name] || (tx.status === "unclassified" ? "?" : "•");
@@ -1284,7 +1291,8 @@
       return t.scope === "shared" && t.status === "confirmed";
     });
     var total = shared.reduce(function (s,t) { return s + Number(t.amount); }, 0);
-    var myShare = Math.round(total / 2);
+    var meSharePercent = currentMeSharePercent();
+    var myShare = Math.round(total * meSharePercent / 100);
     var partnerShare = total - myShare;
 
     var paidByMe = shared.filter(function (t) { return t.payer === "me"; })
@@ -1443,12 +1451,38 @@
           '<span class="tx-edit-label">編集 ›</span></div></button>';
       }).join("");
 
+    var meSharePercent = currentMeSharePercent();
+    document.getElementById("shareSettingSummary").textContent =
+      "にゃち " + meSharePercent + "% / うー " + (100 - meSharePercent) + "%";
+    document.getElementById("categorySettingSummary").textContent =
+      state.data.categories.length
+        ? state.data.categories.slice(0, 4).map(function (x) { return x.name; }).join("・") +
+          (state.data.categories.length > 4 ? " など" : "")
+        : "費目はまだありません";
+    document.getElementById("merchantRuleSummary").textContent =
+      state.data.merchant_rules.length
+        ? state.data.merchant_rules.length + "件のルールを登録中"
+        : "店舗ルールはまだありません";
+
     document.getElementById("merchantRules").innerHTML =
-      state.data.merchant_rules.map(function (r) {
-        return '<div class="merchant-row"><div><strong>' + escapeHtml(r.merchant_name) +
-          '</strong><small>' + (r.mode === "confirm" ? "毎回確認" :
-          escapeHtml(r.category_name || "未設定") + " ・ " + scopeLabel(r.scope)) +
-          '</small></div><b>›</b></div>';
+      state.data.merchant_rules.length
+        ? state.data.merchant_rules.map(function (r) {
+            return '<button type="button" class="merchant-row merchant-row-button" data-edit-merchant-rule="' + r.id + '">' +
+              '<div><strong>' + escapeHtml(r.merchant_name) +
+              '</strong><small>' + (r.mode === "confirm" ? "毎回確認" :
+              escapeHtml(r.category_name || "未設定") + " ・ " + scopeLabel(r.scope)) +
+              '</small></div><b>›</b></button>';
+          }).join("")
+        : '<p class="muted">店舗ルールはまだありません。</p>';
+
+    document.getElementById("categorySettingsList").innerHTML =
+      state.data.categories.map(function (category) {
+        return '<div class="settings-manage-row">' +
+          '<input type="text" maxlength="40" value="' + escapeHtml(category.name) +
+          '" data-category-input="' + category.id + '">' +
+          '<button type="button" class="settings-mini-button" data-category-save="' + category.id + '">保存</button>' +
+          '<button type="button" class="settings-mini-button danger" data-category-delete="' + category.id + '">削除</button>' +
+          '</div>';
       }).join("");
 
     var categoryOptions = state.data.categories.map(function (c) {
@@ -1457,6 +1491,7 @@
     }).join("");
     document.getElementById("classifyCategory").innerHTML = categoryOptions;
     document.getElementById("manualExpenseCategory").innerHTML = categoryOptions;
+    document.getElementById("merchantRuleCategory").innerHTML = categoryOptions;
 
     document.getElementById("settlementAmount").textContent =
       yen(Math.abs(summary.finalSettlement));
@@ -1551,6 +1586,59 @@
     document.getElementById("initialExpenseDialog").showModal();
   }
 
+  function updateSharePreview(value) {
+    var percent = Number(value);
+    if (!Number.isFinite(percent)) percent = currentMeSharePercent();
+    percent = Math.max(0, Math.min(100, Math.round(percent)));
+    document.getElementById("meSharePreview").textContent = percent + "%";
+    document.getElementById("partnerSharePreview").textContent = (100 - percent) + "%";
+  }
+
+  function openShareSettings() {
+    var percent = currentMeSharePercent();
+    document.getElementById("meSharePercent").value = String(percent);
+    updateSharePreview(percent);
+    document.getElementById("shareSettingsDialog").showModal();
+  }
+
+  function syncMerchantRuleFields() {
+    var auto = document.getElementById("merchantRuleMode").value === "auto";
+    document.getElementById("merchantRuleCategoryLabel").classList.toggle("hidden", !auto);
+    document.getElementById("merchantRuleCategory").required = auto;
+  }
+
+  function openMerchantRuleAdd() {
+    document.getElementById("merchantRuleForm").reset();
+    document.getElementById("merchantRuleId").value = "";
+    document.getElementById("merchantRuleDialogTitle").textContent = "店舗ルールを追加";
+    document.getElementById("merchantRuleSaveButton").textContent = "保存する";
+    document.getElementById("deleteMerchantRuleButton").classList.add("hidden");
+    document.getElementById("merchantRuleMode").value = "auto";
+    document.getElementById("merchantRuleScope").value = "shared";
+    syncMerchantRuleFields();
+    document.getElementById("merchantRuleDialog").showModal();
+  }
+
+  function openMerchantRuleEditor(id) {
+    var rule = state.data.merchant_rules.find(function (x) {
+      return Number(x.id) === Number(id);
+    });
+    if (!rule) return;
+
+    document.getElementById("merchantRuleId").value = String(rule.id);
+    document.getElementById("merchantRuleDialogTitle").textContent = rule.merchant_name + " のルール";
+    document.getElementById("merchantRuleName").value = rule.merchant_name || "";
+    document.getElementById("merchantRuleMode").value = rule.mode || "auto";
+    document.getElementById("merchantRuleScope").value = rule.scope || "shared";
+    if (rule.category_name) {
+      document.getElementById("merchantRuleCategory").value = rule.category_name;
+    }
+    document.getElementById("merchantRuleSaveButton").textContent = "変更を保存";
+    document.getElementById("deleteMerchantRuleButton").classList.remove("hidden");
+    syncMerchantRuleFields();
+    document.getElementById("merchantRuleDialog").showModal();
+  }
+
   function bindDynamicButtons() {
     document.querySelectorAll("[data-classify]").forEach(function (button) {
       button.onclick = function () {
@@ -1567,6 +1655,61 @@
     document.querySelectorAll("[data-edit-initial-expense]").forEach(function (button) {
       button.onclick = function () {
         openInitialExpenseEditor(Number(button.getAttribute("data-edit-initial-expense")));
+      };
+    });
+
+    document.querySelectorAll("[data-edit-merchant-rule]").forEach(function (button) {
+      button.onclick = function () {
+        openMerchantRuleEditor(Number(button.getAttribute("data-edit-merchant-rule")));
+      };
+    });
+
+    document.querySelectorAll("[data-category-save]").forEach(function (button) {
+      button.onclick = async function () {
+        var id = Number(button.getAttribute("data-category-save"));
+        var input = document.querySelector('[data-category-input="' + id + '"]');
+        var value = input ? input.value.trim() : "";
+        if (!value) return;
+        button.disabled = true;
+        try {
+          await window.kakeiboDb.updateCategory(id, value);
+          state.data = await window.kakeiboDb.getInitialData();
+          render();
+        } catch (error) {
+          console.error(error);
+          alert(error && error.code === "23505"
+            ? "同じ名前の費目がすでにあります。"
+            : "費目を変更できませんでした。");
+        } finally {
+          button.disabled = false;
+        }
+      };
+    });
+
+    document.querySelectorAll("[data-category-delete]").forEach(function (button) {
+      button.onclick = async function () {
+        var id = Number(button.getAttribute("data-category-delete"));
+        var category = state.data.categories.find(function (x) {
+          return Number(x.id) === id;
+        });
+        if (!category) return;
+        var ok = window.confirm(
+          "「" + category.name + "」を削除しますか？\n" +
+          "この費目を使っている明細や店舗ルールは「未設定」になります。"
+        );
+        if (!ok) return;
+
+        button.disabled = true;
+        try {
+          await window.kakeiboDb.deleteCategory(id);
+          state.data = await window.kakeiboDb.getInitialData();
+          render();
+        } catch (error) {
+          console.error(error);
+          alert("費目を削除できませんでした。");
+        } finally {
+          button.disabled = false;
+        }
       };
     });
 
@@ -1637,6 +1780,112 @@
       var target = document.getElementById(button.getAttribute("data-switch-dialog"));
       if (target) target.showModal();
     });
+  });
+
+  document.getElementById("shareSettingsButton").addEventListener("click", openShareSettings);
+  document.getElementById("categorySettingsButton").addEventListener("click", function () {
+    document.getElementById("categorySettingsDialog").showModal();
+  });
+  document.getElementById("merchantSettingsButton").addEventListener("click", openMerchantRuleAdd);
+  document.getElementById("addMerchantRuleButton").addEventListener("click", openMerchantRuleAdd);
+
+  document.getElementById("meSharePercent").addEventListener("input", function (event) {
+    updateSharePreview(event.target.value);
+  });
+
+  document.getElementById("shareSettingsForm").addEventListener("submit", async function (event) {
+    event.preventDefault();
+    var input = document.getElementById("meSharePercent");
+    var percent = Number(input.value);
+    if (!Number.isInteger(percent) || percent < 0 || percent > 100) {
+      alert("0〜100の整数で入力してください。");
+      return;
+    }
+
+    var button = event.submitter;
+    if (button) button.disabled = true;
+    try {
+      await window.kakeiboDb.saveAppSettings(percent);
+      state.data = await window.kakeiboDb.getInitialData();
+      document.getElementById("shareSettingsDialog").close();
+      render();
+    } catch (error) {
+      console.error(error);
+      alert("負担割合を保存できませんでした。");
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
+  document.getElementById("categoryAddForm").addEventListener("submit", async function (event) {
+    event.preventDefault();
+    var input = document.getElementById("newCategoryName");
+    var name = input.value.trim();
+    if (!name) return;
+
+    var button = event.submitter;
+    if (button) button.disabled = true;
+    try {
+      await window.kakeiboDb.addCategory(name);
+      state.data = await window.kakeiboDb.getInitialData();
+      input.value = "";
+      render();
+    } catch (error) {
+      console.error(error);
+      alert(error && error.code === "23505"
+        ? "同じ名前の費目がすでにあります。"
+        : "費目を追加できませんでした。");
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
+  document.getElementById("merchantRuleMode").addEventListener("change", syncMerchantRuleFields);
+
+  document.getElementById("merchantRuleForm").addEventListener("submit", async function (event) {
+    event.preventDefault();
+    var mode = document.getElementById("merchantRuleMode").value;
+    var rule = {
+      id:Number(document.getElementById("merchantRuleId").value || 0) || null,
+      merchant_name:document.getElementById("merchantRuleName").value.trim(),
+      mode:mode,
+      category_name:mode === "auto" ? document.getElementById("merchantRuleCategory").value : null,
+      scope:document.getElementById("merchantRuleScope").value
+    };
+    if (!rule.merchant_name || (mode === "auto" && !rule.category_name)) return;
+
+    var button = event.submitter;
+    if (button) button.disabled = true;
+    try {
+      await window.kakeiboDb.saveMerchantRule(rule);
+      state.data = await window.kakeiboDb.getInitialData();
+      document.getElementById("merchantRuleDialog").close();
+      render();
+    } catch (error) {
+      console.error(error);
+      alert("店舗ルールを保存できませんでした。");
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
+  document.getElementById("deleteMerchantRuleButton").addEventListener("click", async function () {
+    var id = Number(document.getElementById("merchantRuleId").value || 0);
+    var rule = state.data.merchant_rules.find(function (x) {
+      return Number(x.id) === id;
+    });
+    if (!id || !rule) return;
+    if (!window.confirm("「" + rule.merchant_name + "」の店舗ルールを削除しますか？")) return;
+
+    try {
+      await window.kakeiboDb.deleteMerchantRule(id);
+      state.data = await window.kakeiboDb.getInitialData();
+      document.getElementById("merchantRuleDialog").close();
+      render();
+    } catch (error) {
+      console.error(error);
+      alert("店舗ルールを削除できませんでした。");
+    }
   });
 
   document.getElementById("csvFileInput").addEventListener("change", async function (event) {
