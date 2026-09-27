@@ -1487,24 +1487,36 @@
     }) || null;
   }
 
-  function repaymentRecord(monthKey) {
+  function repaymentRecord(monthKey, plan) {
     return (state.data.repayments || []).find(function (x) {
-      return monthKeyFromDate(x.repayment_date) === monthKey;
+      return Number(x.repayment_plan_id) === Number(plan && plan.id) &&
+        monthKeyFromDate(x.repayment_month) === monthKey;
+    }) || null;
+  }
+
+  function repaymentSetting(monthKey, plan) {
+    return (state.data.repayment_amounts || []).find(function (x) {
+      return Number(x.repayment_plan_id) === Number(plan && plan.id) &&
+        monthKeyFromDate(x.repayment_month) === monthKey;
     }) || null;
   }
 
   function repaymentAmountForMonth(monthKey, plan) {
     if (!plan || !plan.id || monthKey < REPAYMENT_START_MONTH) return 0;
 
-    var recorded = repaymentRecord(monthKey);
+    var recorded = repaymentRecord(monthKey, plan);
     if (recorded) return Number(recorded.amount || 0);
 
-    var monthlyAmount = Math.max(0, Number(plan.monthly_amount || 0));
+    var setting = repaymentSetting(monthKey, plan);
+    var monthlyAmount = setting
+      ? Math.max(0, Number(setting.amount || 0))
+      : Math.max(0, Number(plan.monthly_amount || 0));
     var originalAmount = Math.max(0, Number(plan.original_amount || 0));
     if (!monthlyAmount || !originalAmount) return 0;
 
     var repaidBefore = (state.data.repayments || []).filter(function (x) {
-      return monthKeyFromDate(x.repayment_date) < monthKey;
+      return Number(x.repayment_plan_id) === Number(plan.id) &&
+        monthKeyFromDate(x.repayment_month) < monthKey;
     }).reduce(function (sum, x) {
       return sum + Number(x.amount || 0);
     }, 0);
@@ -2462,7 +2474,12 @@
     button.textContent = "保存しています…";
 
     try {
-      await window.kakeiboDb.savePaidSettlement(sourceMonth, amount, repaymentAmount);
+      await window.kakeiboDb.markSettlementPaid(
+        sourceMonth,
+        amount,
+        summary.plan ? summary.plan.id : null,
+        repaymentAmount
+      );
       state.data = await window.kakeiboDb.getInitialData();
       render();
     } catch (e) {
@@ -2484,7 +2501,7 @@
     if (!ok) return;
 
     try {
-      await window.kakeiboDb.deletePaidSettlement(sourceMonth);
+      await window.kakeiboDb.undoSettlementPaid(sourceMonth);
       state.data = await window.kakeiboDb.getInitialData();
       render();
     } catch (e) {
@@ -2756,22 +2773,36 @@
     });
   }
 
-  document.getElementById("repaymentForm").addEventListener("submit", async function () {
+  var repaymentOpenButton = document.querySelector('[data-open="repaymentDialog"]');
+  if (repaymentOpenButton) {
+    repaymentOpenButton.addEventListener("click", function () {
+      document.getElementById("repaymentInput").value =
+        String(calculateSummary().monthlyRepayment || 0);
+    });
+  }
+
+  document.getElementById("repaymentForm").addEventListener("submit", async function (event) {
+    event.preventDefault();
     var amount = Number(document.getElementById("repaymentInput").value || 0);
-    if (state.data.repayment_plan) {
-      state.data.repayment_plan.monthly_amount = amount;
-    }
+    if (!Number.isFinite(amount) || amount < 0 || !state.data.repayment_plan) return;
+
+    var button = event.submitter;
+    if (button) button.disabled = true;
     try {
-      if (state.data.repayment_plan) {
-        await window.kakeiboDb.updateRepaymentAmount(
-          state.data.repayment_plan.id,
-          amount
-        );
-      }
+      await window.kakeiboDb.saveMonthlyRepaymentAmount(
+        state.data.repayment_plan.id,
+        state.currentMonth,
+        amount
+      );
+      state.data = await window.kakeiboDb.getInitialData();
+      document.getElementById("repaymentDialog").close();
+      render();
     } catch (e) {
       console.error(e);
+      alert("この月の返済額を保存できませんでした。");
+    } finally {
+      if (button) button.disabled = false;
     }
-    setTimeout(render, 0);
   });
 
   async function start() {
