@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=20260927-1508">
   <link rel="icon" type="image/png" href="./apple-touch-icon.png?v=20260927-1508">
   <link rel="manifest" href="./manifest.webmanifest?v=20260927-1508">
-  <link rel="stylesheet" href="./styles.css?v=20260927-MASCOTANIM2">
+  <link rel="stylesheet" href="./styles.css?v=20260927-SETTLEMENT1">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -77,27 +77,32 @@
     <main>
       <section class="screen active" data-screen="home">
         <article class="settlement-card">
-          <p id="settlementTitle">10月の最終精算</p>
+          <div class="settlement-card-head">
+            <p id="settlementTitle">10月分の精算</p>
+            <span class="settlement-cycle">翌月末精算</span>
+          </div>
+          <p id="settlementTiming" class="settlement-timing">11月末に確定・精算</p>
+          <span class="settlement-amount-label">現在の精算見込み</span>
           <h2 id="settlementAmount">¥64,500</h2>
           <div class="settlement-direction" id="settlementDirection">うー → にゃちへ支払い</div>
-          <p class="settlement-note">生活費・返済・繰越をまとめた金額です。</p>
+          <p id="settlementNote" class="settlement-note">10/1〜10/31に使った分を集計しています。</p>
           <button class="white-button" type="button" data-open="breakdownDialog">内訳を見る</button>
         </article>
 
         <div class="metrics-grid">
           <article class="metric-card">
-            <span id="monthlyTotalTitle">10月の生活費</span>
+            <span id="monthlyTotalTitle">10月分の生活費</span>
             <strong id="monthlyTotal">¥84,260</strong>
             <small>共同生活費のみ</small>
           </article>
           <article class="metric-card">
-            <span id="monthlyRepaymentTitle">10月の返済</span>
+            <span id="monthlyRepaymentTitle">10月分の返済</span>
             <strong id="monthlyRepayment">¥20,000</strong>
             <small id="remainingDebt">残り ¥180,000</small>
           </article>
         </div>
 
-        <h3 class="section-title" id="monthlyShareTitle">10月の負担</h3>
+        <h3 class="section-title" id="monthlyShareTitle">10月分の負担</h3>
         <article class="split-card">
           <div><span>にゃち</span><strong id="myShare">¥42,130</strong></div>
           <span class="swap">↔</span>
@@ -105,7 +110,7 @@
         </article>
 
         <div class="section-head">
-          <h3 class="section-title" id="usageTitle">10月の使い道</h3>
+          <h3 class="section-title" id="usageTitle">10月分の使い道</h3>
           <button type="button" class="text-button" data-go="analysis">分析を見る</button>
         </div>
         <article class="chart-card">
@@ -114,7 +119,7 @@
         </article>
 
         <div class="section-head">
-          <h3 class="section-title" id="monthlySpendingTitle">10月の支出</h3>
+          <h3 class="section-title" id="monthlySpendingTitle">10月分の支出</h3>
           <button type="button" class="text-button" data-go="transactions">すべて見る</button>
         </div>
         <div id="recentTransactions" class="transaction-list"></div>
@@ -456,7 +461,7 @@
 
   <dialog id="repaymentDialog">
     <form method="dialog" class="dialog-card" id="repaymentForm">
-      <div class="dialog-head"><h3>今月の返済額</h3><button type="button" data-close-dialog>×</button></div>
+      <div class="dialog-head"><h3>この月の返済額</h3><button type="button" data-close-dialog>×</button></div>
       <label>返済額<input id="repaymentInput" type="number" min="0" step="1000" value="20000"></label>
       <button class="primary-button" value="save">変更する</button>
     </form>
@@ -467,7 +472,7 @@
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
   <script src="./supabase-client.js?v=20260927-SETTINGS1"></script>
-  <script src="./app.js?v=20260927-EPOSPDF2"></script>
+  <script src="./app.js?v=20260927-SETTLEMENT1"></script>
   <script src="./auth.js?v=20260927-1426"></script>
 </body>
 </html>
