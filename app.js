@@ -81,6 +81,10 @@
     return scope === "shared" ? "共同" : scope === "mine" ? "にゃち個人" : scope === "partner" ? "うー個人" : "未設定";
   }
 
+  function payerLabel(payer) {
+    return payer === "me" ? "にゃち" : payer === "partner" ? "うー" : "未設定";
+  }
+
   function currentMeSharePercent() {
     var settings = state.data && state.data.settings ? state.data.settings : null;
     var value = settings ? Number(settings.me_share_percent) : 50;
@@ -1520,7 +1524,8 @@
   }
 
   function txRow(tx) {
-    var sub = shortDate(tx.date) + " ・ " + (tx.category_name || "その他") + " ・ " + scopeLabel(tx.scope);
+    var sub = shortDate(tx.date) + " ・ " + (tx.category_name || "その他") + " ・ " +
+      scopeLabel(tx.scope) + " ・ 支払：" + payerLabel(tx.payer);
     return '<button type="button" class="transaction-row transaction-edit-row" data-edit-tx="' + tx.id + '">' +
       '<div class="tx-icon">' + iconFor(tx) + '</div>' +
       '<div class="tx-main"><strong>' + escapeHtml(tx.merchant_name) + '</strong><small>' + sub + '</small></div>' +
@@ -2087,10 +2092,12 @@
 
     var categorySelect = document.getElementById("classifyCategory");
     var scopeSelect = document.getElementById("classifyScope");
+    var payerSelect = document.getElementById("classifyPayer");
     var ruleSelect = document.getElementById("ruleMode");
 
     if (tx.category_name) categorySelect.value = tx.category_name;
     scopeSelect.value = tx.scope || "shared";
+    payerSelect.value = tx.payer || "me";
     ruleSelect.value = "once";
 
     document.getElementById("classifyDialog").showModal();
@@ -2824,6 +2831,7 @@
     var id = Number(document.getElementById("classifyId").value);
     var category = document.getElementById("classifyCategory").value;
     var scope = document.getElementById("classifyScope").value;
+    var payer = document.getElementById("classifyPayer").value;
     var remember = document.getElementById("ruleMode").value === "merchant";
 
     var tx = state.data.transactions.find(function (x) {
@@ -2832,6 +2840,7 @@
     if (tx) {
       tx.category_name = category;
       tx.scope = scope;
+      tx.payer = payer;
       tx.status = "confirmed";
       if (remember) {
         state.data.merchant_rules.push({
@@ -2845,7 +2854,7 @@
     }
 
     try {
-      await window.kakeiboDb.classifyTransaction(id, category, scope, remember);
+      await window.kakeiboDb.classifyTransaction(id, category, scope, payer, remember);
       state.data = await window.kakeiboDb.getInitialData();
       render();
     } catch (e) {
