@@ -289,6 +289,16 @@
     return "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
   }
 
+  function pdfDocumentOptions(buffer) {
+    return {
+      data:new Uint8Array(buffer.slice(0)),
+      cMapUrl:"https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/",
+      cMapPacked:true,
+      standardFontDataUrl:"https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/standard_fonts/",
+      useSystemFonts:true
+    };
+  }
+
   async function extractPdfRows(buffer) {
     if (!window.pdfjsLib) {
       throw new Error("PDF読み込み機能を起動できませんでした。");
@@ -296,9 +306,7 @@
 
     window.pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl();
 
-    var loadingTask = window.pdfjsLib.getDocument({
-      data: new Uint8Array(buffer.slice(0))
-    });
+    var loadingTask = window.pdfjsLib.getDocument(pdfDocumentOptions(buffer));
     var pdf;
 
     try {
@@ -382,9 +390,7 @@
     }
 
     window.pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl();
-    var loadingTask = window.pdfjsLib.getDocument({
-      data:new Uint8Array(buffer.slice(0))
-    });
+    var loadingTask = window.pdfjsLib.getDocument(pdfDocumentOptions(buffer));
 
     try {
       return await loadingTask.promise;
