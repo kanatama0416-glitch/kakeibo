@@ -523,47 +523,23 @@
   function parseRakutenPdfPages(pages) {
     var parsedRows = [];
     var datePattern = /^20\d{2}[\/\.\-]\d{1,2}[\/\.\-]\d{1,2}$/;
-    var userPattern = /^(?:本人\*?|家族\*?)$/;
-    var paymentPattern = /^(?:1回払い|一括払い|分割払い|リボ払い|ボーナス払い)$/;
 
     (pages || []).forEach(function (page) {
       var items = page.items || [];
       var dateItems = items.filter(function (item) {
-        return datePattern.test(normalizeText(item.text));
+        return Number(item.x || 0) < 90 &&
+          datePattern.test(normalizeText(item.text));
       });
 
       dateItems.forEach(function (dateItem) {
         var line = items.filter(function (item) {
-          return Math.abs(Number(item.y || 0) - Number(dateItem.y || 0)) <= 3.5;
+          return Math.abs(Number(item.y || 0) - Number(dateItem.y || 0)) <= 8;
         }).sort(function (a, b) {
           return Number(a.x || 0) - Number(b.x || 0);
         });
 
-        var userItem = line.find(function (item) {
-          return userPattern.test(normalizeText(item.text));
-        });
-        var paymentItem = line.find(function (item) {
-          return paymentPattern.test(normalizeText(item.text));
-        });
-
-        if (!userItem || !paymentItem) return;
-        if (Number(dateItem.x || 0) >= Number(userItem.x || 0)) return;
-        if (Number(userItem.x || 0) >= Number(paymentItem.x || 0)) return;
-
-        var merchant = cleanPdfMerchant(line.filter(function (item) {
-          var x = Number(item.x || 0);
-          return x > Number(dateItem.x || 0) && x < Number(userItem.x || 0);
-        }).map(function (item) {
-          return item.text;
-        }).join(" "));
-
-        merchant = merchant
-          .replace(/利用国[A-Z]{3}/g, "")
-          .replace(/\s{2,}/g, " ")
-          .trim();
-
         var amountItems = line.filter(function (item) {
-          return Number(item.x || 0) > Number(paymentItem.x || 0);
+          return Number(item.x || 0) > Number(dateItem.x || 0) + 180;
         }).map(function (item) {
           return {
             x:Number(item.x || 0),
@@ -575,16 +551,40 @@
           return a.x - b.x;
         });
 
-        var amount = amountItems.length ? amountItems[0].amount : null;
-        var date = parseCsvDate(dateItem.text);
+        if (!amountItems.length) return;
 
-        if (!date || !merchant || !amount) return;
+        var firstAmount = amountItems[0];
+        var merchantParts = line.filter(function (item) {
+          var x = Number(item.x || 0);
+          return x > Number(dateItem.x || 0) && x < firstAmount.x;
+        }).map(function (item) {
+          return normalizeText(item.text);
+        }).filter(function (text) {
+          if (!text) return false;
+          if (datePattern.test(text)) return false;
+          if (/^(?:本人|家族)\*?$/.test(text)) return false;
+          if (text === "*") return false;
+          if (/^(?:1回払い|一括払い|分割払い|リボ払い|ボーナス払い|回払い)$/.test(text)) return false;
+          if (text === "1") return false;
+          return true;
+        });
+
+        var merchant = cleanPdfMerchant(merchantParts.join(" "))
+          .replace(/利用国\s*[A-Z]{3}/g, "")
+          .replace(/本人\s*\*?/g, "")
+          .replace(/家族\s*\*?/g, "")
+          .replace(/(?:1\s*)?回払い|一括払い|分割払い|リボ払い|ボーナス払い/g, "")
+          .replace(/\s{2,}/g, " ")
+          .trim();
+
+        var date = parseCsvDate(dateItem.text);
+        if (!date || !merchant || merchant.length < 2 || !firstAmount.amount) return;
 
         parsedRows.push({
           date:date,
           merchant_name:merchant,
           merchant_raw:line.map(function (item) { return item.text; }).join(" "),
-          amount:amount
+          amount:firstAmount.amount
         });
       });
     });
