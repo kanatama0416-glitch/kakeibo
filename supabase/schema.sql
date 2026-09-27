@@ -126,24 +126,5 @@ create index if not exists transactions_category_id_idx on public.transactions(c
 create index if not exists repayments_repayment_plan_id_idx on public.repayments(repayment_plan_id);
 
 
--- Current authenticated app addition: initial expense entries.
-grant select, insert, update, delete on public.initial_expenses to authenticated;
-grant usage, select on sequence public.initial_expenses_id_seq to authenticated;
-
--- Production policy mirrors the allowed-user policy used by the live app.
-create policy "authorized user initial expenses" on public.initial_expenses
-  for all to authenticated
-  using (
-    exists (
-      select 1 from private.allowed_users a
-      where a.active = true
-        and lower(a.email) = lower(coalesce((select auth.jwt() ->> 'email'), ''))
-    )
-  )
-  with check (
-    exists (
-      select 1 from private.allowed_users a
-      where a.active = true
-        and lower(a.email) = lower(coalesce((select auth.jwt() ->> 'email'), ''))
-    )
-  );
+-- The live app's authenticated grants and allowed-user RLS policy for
+-- initial_expenses are managed in the deployed Supabase migration.
