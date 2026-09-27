@@ -12,7 +12,7 @@
   }
 
   function scopeLabel(scope) {
-    return scope === "shared" ? "共同" : scope === "mine" ? "あなた個人" : scope === "partner" ? "彼氏個人" : "未設定";
+    return scope === "shared" ? "共同" : scope === "mine" ? "にゃち個人" : scope === "partner" ? "うー個人" : "未設定";
   }
 
   function iconFor(tx) {
@@ -75,7 +75,7 @@
   }
 
   function directionText(amount) {
-    return amount >= 0 ? "彼氏 → あなたへ支払い" : "あなた → 彼氏へ支払い";
+    return amount >= 0 ? "うー → にゃちへ支払い" : "にゃち → うーへ支払い";
   }
 
   function render() {
@@ -125,16 +125,38 @@
     }).join("");
 
     document.getElementById("loanBalance").textContent =
-      (summary.loanNet >= 0 ? "彼氏 → あなた " : "あなた → 彼氏 ") +
+      (summary.loanNet >= 0 ? "うー → にゃち " : "にゃち → うー ") +
       yen(Math.abs(summary.loanNet));
 
     document.getElementById("loansList").innerHTML =
       state.data.loans.filter(function (x) { return x.status === "open"; }).map(function (x) {
         var detail = shortDate(x.date) + " ・ " +
-          (x.lender === "me" ? "あなたが立替" : "彼氏が立替");
+          (x.lender === "me" ? "にゃちが立替" : "うーが立替");
         return '<div class="transaction-row"><div class="tx-icon">↔</div>' +
           '<div class="tx-main"><strong>' + escapeHtml(x.description) + '</strong><small>' +
           detail + '</small></div><div class="tx-amount">' + yen(x.amount) + '</div></div>';
+      }).join("");
+
+    var initialExpenses = state.data.initial_expenses || [];
+    var initialTotal = initialExpenses.reduce(function (sum, x) {
+      return sum + Number(x.amount || 0);
+    }, 0);
+    var initialMe = initialExpenses.filter(function (x) { return x.payer === "me"; })
+      .reduce(function (sum, x) { return sum + Number(x.amount || 0); }, 0);
+    var initialPartner = initialExpenses.filter(function (x) { return x.payer === "partner"; })
+      .reduce(function (sum, x) { return sum + Number(x.amount || 0); }, 0);
+
+    document.getElementById("initialExpenseTotal").textContent = yen(initialTotal);
+    document.getElementById("initialExpenseSplit").textContent =
+      "にゃち " + yen(initialMe) + " / うー " + yen(initialPartner);
+    document.getElementById("initialExpensesList").innerHTML =
+      initialExpenses.map(function (x) {
+        var detail = shortDate(x.date) + " ・ " +
+          (x.payer === "me" ? "にゃちが支払い" : "うーが支払い");
+        return '<div class="transaction-row"><div class="tx-icon">⌂</div>' +
+          '<div class="tx-main"><strong>' + escapeHtml(x.item_name) + '</strong><small>' +
+          detail + (x.memo ? " ・ " + escapeHtml(x.memo) : "") +
+          '</small></div><div class="tx-amount">' + yen(x.amount) + '</div></div>';
       }).join("");
 
     document.getElementById("merchantRules").innerHTML =
@@ -224,6 +246,15 @@
     });
   });
 
+  document.querySelectorAll("[data-switch-dialog]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var currentDialog = button.closest("dialog");
+      if (currentDialog) currentDialog.close();
+      var target = document.getElementById(button.getAttribute("data-switch-dialog"));
+      if (target) target.showModal();
+    });
+  });
+
   document.querySelectorAll(".chip").forEach(function (button) {
     button.addEventListener("click", function () {
       document.querySelectorAll(".chip").forEach(function (x) {
@@ -267,6 +298,37 @@
     setTimeout(render, 0);
   });
 
+  document.getElementById("initialExpenseForm").addEventListener("submit", async function () {
+    var expense = {
+      item_name: document.getElementById("initialExpenseItem").value.trim(),
+      amount: Number(document.getElementById("initialExpenseAmount").value || 0),
+      payer: document.getElementById("initialExpensePayer").value,
+      date: document.getElementById("initialExpenseDate").value,
+      memo: document.getElementById("initialExpenseMemo").value.trim()
+    };
+
+    if (!expense.item_name || !expense.date || expense.amount <= 0) return;
+
+    try {
+      await window.kakeiboDb.addInitialExpense(expense);
+      state.data = await window.kakeiboDb.getInitialData();
+      document.getElementById("initialExpenseForm").reset();
+      setDefaultInitialExpenseDate();
+      render();
+    } catch (e) {
+      console.error(e);
+      alert("初期費用を保存できませんでした。");
+    }
+  });
+
+  function setDefaultInitialExpenseDate() {
+    var input = document.getElementById("initialExpenseDate");
+    if (!input || input.value) return;
+    var now = new Date();
+    var local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+    input.value = local.toISOString().slice(0, 10);
+  }
+
   document.getElementById("repaymentForm").addEventListener("submit", async function () {
     var amount = Number(document.getElementById("repaymentInput").value || 0);
     if (state.data.repayment_plan) {
@@ -291,6 +353,7 @@
 
     try {
       state.data = await window.kakeiboDb.getInitialData();
+      setDefaultInitialExpenseDate();
       render();
     } catch (error) {
       state.started = false;
