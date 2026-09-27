@@ -7,10 +7,10 @@
   "theme_color": "#f7db2b",
   "icons": [
     {
-      "src": "./assets/app-icon-180.png",
+      "src": "./apple-touch-icon.png",
       "sizes": "180x180",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     }
   ]
 }
