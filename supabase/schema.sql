@@ -95,6 +95,12 @@ create table if not exists public.repayments (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.app_settings (
+  id smallint primary key default 1 check (id = 1),
+  me_share_percent integer not null default 50 check (me_share_percent between 0 and 100),
+  updated_at timestamptz not null default now()
+);
+
 alter table public.categories enable row level security;
 alter table public.merchant_rules enable row level security;
 alter table public.transactions enable row level security;
@@ -103,6 +109,7 @@ alter table public.monthly_carryovers enable row level security;
 alter table public.initial_expenses enable row level security;
 alter table public.repayment_plans enable row level security;
 alter table public.repayments enable row level security;
+alter table public.app_settings enable row level security;
 
 grant select on public.categories to anon;
 grant select, insert on public.merchant_rules to anon;
@@ -146,3 +153,28 @@ create index if not exists repayments_repayment_plan_id_idx on public.repayments
 -- with the same private.allowed_users RLS policy used by the other live tables.
 create index if not exists monthly_carryovers_to_month_idx
   on public.monthly_carryovers(to_month);
+
+
+-- Live household settings are shared by the authenticated allow-listed users.
+grant select, insert, update on public.app_settings to authenticated;
+
+create policy "authorized user app settings" on public.app_settings
+  for all to authenticated
+  using (
+    exists (
+      select 1 from private.allowed_users a
+      where a.active = true
+        and lower(a.email) = lower(coalesce((select auth.jwt() ->> 'email'), ''))
+    )
+  )
+  with check (
+    exists (
+      select 1 from private.allowed_users a
+      where a.active = true
+        and lower(a.email) = lower(coalesce((select auth.jwt() ->> 'email'), ''))
+    )
+  );
+
+insert into public.app_settings (id, me_share_percent)
+values (1, 50)
+on conflict (id) do nothing;
