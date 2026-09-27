@@ -1943,6 +1943,63 @@
     select.value = state.currentMonth;
   }
 
+  function isIOSViewport() {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  }
+
+  var floatingUiFrame = null;
+
+  function syncFloatingUi() {
+    floatingUiFrame = null;
+    if (!isIOSViewport()) return;
+
+    var shell = document.getElementById("appShell");
+    if (!shell || shell.classList.contains("hidden")) return;
+
+    var viewport = window.visualViewport;
+    var pageTop = viewport ? viewport.pageTop : window.scrollY;
+    var viewportHeight = viewport ? viewport.height : window.innerHeight;
+    var shellPageTop = shell.getBoundingClientRect().top + window.scrollY;
+
+    var nav = document.querySelector(".bottom-nav");
+    var fab = document.querySelector(".fab");
+    var navHeight = 0;
+
+    if (nav) {
+      nav.style.position = "absolute";
+      nav.style.bottom = "auto";
+      navHeight = nav.offsetHeight || 64;
+      nav.style.top = Math.max(
+        0,
+        pageTop + viewportHeight - navHeight - shellPageTop
+      ) + "px";
+    }
+
+    if (fab) {
+      fab.style.position = "absolute";
+      fab.style.bottom = "auto";
+      var fabHeight = fab.offsetHeight || 56;
+      fab.style.top = Math.max(
+        0,
+        pageTop + viewportHeight - navHeight - fabHeight - 12 - shellPageTop
+      ) + "px";
+      fab.style.right = "18px";
+    }
+  }
+
+  function scheduleFloatingUiSync() {
+    if (floatingUiFrame != null) return;
+    floatingUiFrame = window.requestAnimationFrame(syncFloatingUi);
+  }
+
+  window.addEventListener("scroll", scheduleFloatingUiSync, { passive:true });
+  window.addEventListener("resize", scheduleFloatingUiSync, { passive:true });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("scroll", scheduleFloatingUiSync, { passive:true });
+    window.visualViewport.addEventListener("resize", scheduleFloatingUiSync, { passive:true });
+  }
+
   function go(screen) {
     document.querySelectorAll(".screen").forEach(function (x) {
       x.classList.toggle("active", x.getAttribute("data-screen") === screen);
@@ -1951,6 +2008,8 @@
       x.classList.toggle("active", x.getAttribute("data-go") === screen);
     });
     window.scrollTo({ top:0, behavior:"smooth" });
+    window.setTimeout(scheduleFloatingUiSync, 0);
+    window.setTimeout(scheduleFloatingUiSync, 250);
   }
 
   document.querySelectorAll("[data-go]").forEach(function (button) {
@@ -2176,6 +2235,8 @@
         (parsed.ignored ? "（" + parsed.ignored + "行は自動判定できず除外）" : "");
       review.classList.remove("hidden");
       renderCsvReview();
+      window.setTimeout(scheduleFloatingUiSync, 0);
+      window.setTimeout(scheduleFloatingUiSync, 300);
     } catch (error) {
       console.error(error);
       message.classList.add("error");
@@ -2418,6 +2479,8 @@
       document.getElementById("loanForm").reset();
       setDefaultEntryDates();
       render();
+      window.setTimeout(scheduleFloatingUiSync, 0);
+      window.setTimeout(scheduleFloatingUiSync, 300);
     } catch (e) {
       console.error(e);
       alert("立替を保存できませんでした。");
