@@ -449,6 +449,29 @@
     setTimeout(render, 0);
   });
 
+  document.getElementById("loanForm").addEventListener("submit", async function () {
+    var loan = {
+      date: document.getElementById("loanDate").value,
+      description: document.getElementById("loanDescription").value.trim(),
+      amount: Number(document.getElementById("loanAmount").value || 0),
+      lender: document.getElementById("loanLender").value,
+      memo: document.getElementById("loanMemo").value.trim()
+    };
+
+    if (!loan.date || !loan.description || loan.amount <= 0) return;
+
+    try {
+      await window.kakeiboDb.addLoan(loan);
+      state.data = await window.kakeiboDb.getInitialData();
+      document.getElementById("loanForm").reset();
+      setDefaultEntryDates();
+      render();
+    } catch (e) {
+      console.error(e);
+      alert("立替を保存できませんでした。");
+    }
+  });
+
   document.getElementById("manualExpenseForm").addEventListener("submit", async function () {
     var tx = {
       date: document.getElementById("manualExpenseDate").value,
@@ -506,7 +529,7 @@
       ? today
       : state.currentMonth + "-01";
 
-    ["manualExpenseDate", "initialExpenseDate"].forEach(function (id) {
+    ["manualExpenseDate", "loanDate", "initialExpenseDate"].forEach(function (id) {
       var input = document.getElementById(id);
       if (input && (force || !input.value)) input.value = defaultDate;
     });
