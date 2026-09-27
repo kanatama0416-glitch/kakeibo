@@ -1934,7 +1934,7 @@
     var guard = 0;
     while (key <= endMonth && guard < 120) {
       options.push('<option value="' + key + '">' +
-        key.split("-")[0] + "年" + Number(key.split("-")[1]) + "月</option>");
+        key.split("-")[0] + "年" + Number(key.split("-")[1]) + "月分</option>");
       key = addMonths(key, 1);
       guard += 1;
     }
