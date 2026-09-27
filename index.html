@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=20260927-1508">
   <link rel="icon" type="image/png" href="./apple-touch-icon.png?v=20260927-1508">
   <link rel="manifest" href="./manifest.webmanifest?v=20260927-1508">
-  <link rel="stylesheet" href="./styles.css?v=20260927-COMPACT1">
+  <link rel="stylesheet" href="./styles.css?v=20260927-MONEYBOOKS1">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -188,19 +188,19 @@
         </div>
 
         <section class="money-panel money-repayment-panel">
-          <div class="money-section-head">
-            <div>
-              <h3>返済状況</h3>
-              <p>立替金の残額と今月の返済額</p>
+          <div class="money-repayment-heading-row">
+            <img class="content-mascot money-books-mascot" src="./assets/mascot-books.webp?v=20260927-1" alt="" aria-hidden="true">
+            <div class="money-section-head">
+              <div>
+                <h3>返済状況</h3>
+                <p>立替金の残額と今月の返済額</p>
+              </div>
             </div>
           </div>
           <article class="debt-card money-debt-card">
             <div class="debt-top">
               <div><span>残り</span><strong id="debtRemaining">¥180,000</strong></div>
               <em id="repaymentBadge">今月 ¥20,000</em>
-            </div>
-            <div class="money-mascot-row">
-              <img class="content-mascot money-coin-mascot" src="./assets/mascot-coin.webp?v=20260927-1" alt="" aria-hidden="true">
             </div>
             <div class="progress"><span id="debtProgress"></span></div>
             <p id="debtMeta">総額 ¥300,000 ・ 返済済 ¥120,000</p>

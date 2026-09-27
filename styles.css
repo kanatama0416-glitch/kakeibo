@@ -424,17 +424,21 @@ dialog{width:min(430px,calc(100% - 28px));border:0;border-radius:24px;padding:0;
   right:12px;
   bottom:7px
 }
-.money-mascot-row{
-  position:relative;
-  height:68px;
-  margin:-3px 0 -5px
+.money-repayment-heading-row{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin:-2px 0 5px
 }
-.money-coin-mascot{
-  position:absolute;
-  width:98px;
+.money-repayment-heading-row .money-section-head{
+  flex:1;
+  min-width:0
+}
+.money-books-mascot{
+  width:90px;
   height:auto;
-  right:6px;
-  top:-4px
+  flex:0 0 auto;
+  margin:0 0 -2px -5px
 }
 @media(max-width:370px){
   .home-coin-mascot{width:70px;right:10px;top:74px}
@@ -446,5 +450,5 @@ dialog{width:min(430px,calc(100% - 28px));border:0;border-radius:24px;padding:0;
   .receipt-runner-mascot{width:72px;right:8px}
   .analysis-summary-card{padding-right:100px}
   .analysis-ledger-mascot{width:82px;right:8px}
-  .money-coin-mascot{width:86px}
+  .money-books-mascot{width:78px;margin-left:-7px}
 }
