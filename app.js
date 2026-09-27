@@ -533,6 +533,108 @@
       .replace(/\s{2,}/g, " ");
   }
 
+  function isEposPdf(text) {
+    return /エポスカード|EPOS|MARUI GROUP/i.test(normalizeText(text));
+  }
+
+  function parseEposPdfPages(pages) {
+    var parsedRows = [];
+    var candidateLines = 0;
+
+    (pages || []).forEach(function (page) {
+      var items = (page.items || []).slice().sort(function (a, b) {
+        var ay = Number(a.y || 0);
+        var by = Number(b.y || 0);
+        if (Math.abs(ay - by) > 3) return by - ay;
+        return Number(a.x || 0) - Number(b.x || 0);
+      });
+
+      var lines = [];
+      items.forEach(function (item) {
+        var y = Number(item.y || 0);
+        var target = null;
+
+        for (var i = 0; i < lines.length; i += 1) {
+          if (Math.abs(Number(lines[i].y || 0) - y) <= 3) {
+            target = lines[i];
+            break;
+          }
+        }
+
+        if (!target) {
+          target = { y:y, items:[] };
+          lines.push(target);
+        }
+        target.items.push(item);
+      });
+
+      lines.forEach(function (line) {
+        line.items.sort(function (a, b) {
+          return Number(a.x || 0) - Number(b.x || 0);
+        });
+
+        var dateTokens = line.items.filter(function (item) {
+          var x = Number(item.x || 0);
+          return x >= 45 && x < 90 && /^\d{2}$/.test(normalizeText(item.text));
+        });
+
+        if (dateTokens.length < 3) return;
+
+        var year = Number(normalizeText(dateTokens[0].text));
+        var month = Number(normalizeText(dateTokens[1].text));
+        var day = Number(normalizeText(dateTokens[2].text));
+
+        if (year < 0 || month < 1 || month > 12 || day < 1 || day > 31) return;
+        candidateLines += 1;
+
+        var amountItems = line.items.filter(function (item) {
+          var x = Number(item.x || 0);
+          return x >= 300 && x < 360;
+        });
+
+        var amount = null;
+        for (var i = 0; i < amountItems.length; i += 1) {
+          amount = parsePdfAmountToken(amountItems[i].text);
+          if (amount) break;
+        }
+        if (!amount) return;
+
+        var merchant = cleanPdfMerchant(line.items.filter(function (item) {
+          var x = Number(item.x || 0);
+          return x >= 80 && x < 300;
+        }).map(function (item) {
+          return normalizeText(item.text);
+        }).join(" "))
+          .replace(/\s{2,}/g, " ")
+          .trim();
+
+        if (!merchant || merchant.length < 2) return;
+
+        var fullYear = 2000 + year;
+        var date = parseCsvDate(
+          fullYear + "/" +
+          String(month).padStart(2, "0") + "/" +
+          String(day).padStart(2, "0")
+        );
+        if (!date) return;
+
+        parsedRows.push({
+          date:date,
+          merchant_name:merchant,
+          merchant_raw:line.items.map(function (item) {
+            return normalizeText(item.text);
+          }).join(" "),
+          amount:amount
+        });
+      });
+    });
+
+    return {
+      rows:parsedRows,
+      candidateLines:candidateLines
+    };
+  }
+
   function parseRakutenPdfPages(pages) {
     var parsedRows = [];
     var dateLines = 0;
@@ -885,7 +987,17 @@
       result.push(row);
     }
 
-    if (rakutenTextRows.length) {
+    var eposMode = isEposPdf(extracted.text);
+    var eposResult = eposMode ? parseEposPdfPages(extracted.pages) : null;
+
+    if (eposMode && eposResult && eposResult.rows.length) {
+      eposResult.rows.forEach(appendParsedPdfRow);
+    } else if (eposMode) {
+      throw new Error(
+        "エポスの明細表は確認できましたが、利用明細を読み取れませんでした。" +
+        "（候補行 " + (eposResult ? eposResult.candidateLines : 0) + "件）"
+      );
+    } else if (rakutenTextRows.length) {
       rakutenTextRows.forEach(appendParsedPdfRow);
     } else {
       extracted.rows.forEach(function (pdfRow) {
