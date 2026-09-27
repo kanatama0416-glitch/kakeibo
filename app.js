@@ -27,6 +27,7 @@
     data: null,
     filter: "all",
     currentClassifyId: null,
+    csvRows: [],
     started: false,
     currentMonth: defaultMonthKey()
   };
@@ -54,6 +55,376 @@
     return String(value == null ? "" : value).replace(/[&<>"']/g, function (m) {
       return { "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;" }[m];
     });
+  }
+
+  function normalizeText(value) {
+    var text = String(value == null ? "" : value);
+    try { text = text.normalize("NFKC"); } catch (e) {}
+    return text.trim();
+  }
+
+  function normalizeMerchant(value) {
+    return normalizeText(value)
+      .toLowerCase()
+      .replace(/[\s　]/g, "")
+      .replace(/[・･._\-—–ー\/\\（）()［\]\[\]「」『』]/g, "");
+  }
+
+  function normalizeCsvHeader(value) {
+    return normalizeText(value)
+      .toLowerCase()
+      .replace(/[\s　・･._\-—–ー\/\\（）()［\]\[\]]/g, "");
+  }
+
+  function parseCsvText(text) {
+    var rows = [];
+    var row = [];
+    var field = "";
+    var inQuotes = false;
+    var source = String(text || "").replace(/^\uFEFF/, "");
+
+    function pushField() {
+      row.push(field);
+      field = "";
+    }
+
+    function pushRow() {
+      pushField();
+      if (row.some(function (value) { return String(value).trim() !== ""; })) {
+        rows.push(row);
+      }
+      row = [];
+    }
+
+    for (var i = 0; i < source.length; i += 1) {
+      var ch = source[i];
+      if (inQuotes) {
+        if (ch === '"') {
+          if (source[i + 1] === '"') {
+            field += '"';
+            i += 1;
+          } else {
+            inQuotes = false;
+          }
+        } else {
+          field += ch;
+        }
+        continue;
+      }
+
+      if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === ",") {
+        pushField();
+      } else if (ch === "\n") {
+        pushRow();
+      } else if (ch !== "\r") {
+        field += ch;
+      }
+    }
+
+    if (field !== "" || row.length) pushRow();
+    return rows;
+  }
+
+  function decodeCsvBuffer(buffer) {
+    try {
+      return new TextDecoder("utf-8", { fatal:true }).decode(buffer).replace(/^\uFEFF/, "");
+    } catch (utf8Error) {
+      try {
+        return new TextDecoder("shift_jis").decode(buffer).replace(/^\uFEFF/, "");
+      } catch (sjisError) {
+        return new TextDecoder("utf-8").decode(buffer).replace(/^\uFEFF/, "");
+      }
+    }
+  }
+
+  function csvColumnIndex(headers, candidates, fallbackWords) {
+    var normalized = headers.map(normalizeCsvHeader);
+    var candidateMap = {};
+    candidates.forEach(function (name) {
+      candidateMap[normalizeCsvHeader(name)] = true;
+    });
+
+    for (var i = 0; i < normalized.length; i += 1) {
+      if (candidateMap[normalized[i]]) return i;
+    }
+
+    for (var j = 0; j < normalized.length; j += 1) {
+      if (fallbackWords.some(function (word) {
+        return normalized[j].indexOf(normalizeCsvHeader(word)) !== -1;
+      })) return j;
+    }
+    return -1;
+  }
+
+  function detectCsvHeader(rows) {
+    var dateNames = ["利用日","ご利用日","利用年月日","ご利用年月日","売上日","取引日","年月日","利用日付"];
+    var merchantNames = ["利用先","ご利用先","利用店名","ご利用店名","加盟店名","店名","摘要","内容","利用内容","ご利用内容"];
+    var amountNames = ["利用金額","ご利用金額","利用額","ご利用額","金額","支払金額","支払総額","請求金額","ご請求金額"];
+
+    for (var i = 0; i < Math.min(rows.length, 12); i += 1) {
+      var headers = rows[i];
+      var dateIndex = csvColumnIndex(headers, dateNames, ["利用日","取引日","売上日","年月日"]);
+      var merchantIndex = csvColumnIndex(headers, merchantNames, ["利用先","利用店","加盟店","店名","摘要","内容"]);
+      var amountIndex = csvColumnIndex(headers, amountNames, ["利用金額","利用額","請求金額","金額"]);
+
+      if (dateIndex >= 0 && merchantIndex >= 0 && amountIndex >= 0) {
+        return {
+          rowIndex:i,
+          dateIndex:dateIndex,
+          merchantIndex:merchantIndex,
+          amountIndex:amountIndex
+        };
+      }
+    }
+    return null;
+  }
+
+  function parseCsvDate(value) {
+    var raw = normalizeText(value);
+    if (!raw) return null;
+
+    raw = raw.replace(/[年月]/g, "/").replace(/日/g, "");
+    raw = raw.replace(/[.]/g, "/").replace(/-/g, "/");
+    var parts = raw.split("/").filter(Boolean);
+
+    var year;
+    var month;
+    var day;
+
+    if (parts.length >= 3) {
+      year = Number(parts[0]);
+      month = Number(parts[1]);
+      day = Number(parts[2]);
+      if (year < 100) year += 2000;
+    } else if (parts.length === 2) {
+      year = Number(state.currentMonth.split("-")[0]);
+      month = Number(parts[0]);
+      day = Number(parts[1]);
+    } else {
+      var digits = raw.replace(/\D/g, "");
+      if (digits.length === 8) {
+        year = Number(digits.slice(0,4));
+        month = Number(digits.slice(4,6));
+        day = Number(digits.slice(6,8));
+      } else {
+        return null;
+      }
+    }
+
+    var date = new Date(Date.UTC(year, month - 1, day));
+    if (
+      date.getUTCFullYear() !== year ||
+      date.getUTCMonth() + 1 !== month ||
+      date.getUTCDate() !== day
+    ) return null;
+
+    return year + "-" + String(month).padStart(2, "0") + "-" + String(day).padStart(2, "0");
+  }
+
+  function parseCsvAmount(value) {
+    var raw = normalizeText(value);
+    if (!raw) return null;
+    var negative = /^-/.test(raw) || /^\(.*\)$/.test(raw);
+    var digits = raw.replace(/[^0-9]/g, "");
+    if (!digits) return null;
+    var amount = Number(digits);
+    if (!Number.isFinite(amount) || amount <= 0 || negative) return null;
+    return amount;
+  }
+
+  function dateDistanceInDays(a, b) {
+    var aTime = Date.parse(a + "T00:00:00Z");
+    var bTime = Date.parse(b + "T00:00:00Z");
+    if (!Number.isFinite(aTime) || !Number.isFinite(bTime)) return 999;
+    return Math.abs(aTime - bTime) / 86400000;
+  }
+
+  function findCsvExistingMatch(row) {
+    var merchantKey = normalizeMerchant(row.merchant_name);
+    var exactMerchant = state.data.transactions.find(function (tx) {
+      return tx.date === row.date &&
+        Number(tx.amount) === Number(row.amount) &&
+        normalizeMerchant(tx.merchant_name) === merchantKey;
+    });
+    if (exactMerchant) {
+      return {
+        tx:exactMerchant,
+        reason:"同じ日・金額・利用先の明細があります"
+      };
+    }
+
+    var sameDateAmount = state.data.transactions.find(function (tx) {
+      return tx.date === row.date && Number(tx.amount) === Number(row.amount);
+    });
+    if (sameDateAmount) {
+      return {
+        tx:sameDateAmount,
+        reason:"同じ日・同じ金額の明細があります"
+      };
+    }
+
+    var nearbyMerchant = state.data.transactions.find(function (tx) {
+      return Number(tx.amount) === Number(row.amount) &&
+        normalizeMerchant(tx.merchant_name) === merchantKey &&
+        dateDistanceInDays(tx.date, row.date) <= 3;
+    });
+    if (nearbyMerchant) {
+      return {
+        tx:nearbyMerchant,
+        reason:"同じ利用先・金額の明細が前後3日以内にあります"
+      };
+    }
+
+    return null;
+  }
+
+  function csvMerchantRule(merchantName) {
+    var key = normalizeMerchant(merchantName);
+    return (state.data.merchant_rules || []).find(function (rule) {
+      return rule.mode === "auto" && normalizeMerchant(rule.merchant_name) === key;
+    }) || null;
+  }
+
+  function buildCsvRows(text) {
+    var parsed = parseCsvText(text);
+    var header = detectCsvHeader(parsed);
+    if (!header) {
+      throw new Error("CSVの「利用日・利用先・金額」の列を見つけられませんでした。");
+    }
+
+    var result = [];
+    var ignored = 0;
+    var csvSeen = {};
+
+    parsed.slice(header.rowIndex + 1).forEach(function (values) {
+      var date = parseCsvDate(values[header.dateIndex]);
+      var merchant = normalizeText(values[header.merchantIndex]);
+      var amount = parseCsvAmount(values[header.amountIndex]);
+
+      if (!date || !merchant || !amount) {
+        ignored += 1;
+        return;
+      }
+
+      var rule = csvMerchantRule(merchant);
+      var row = {
+        date:date,
+        merchant_name:merchant,
+        merchant_raw:merchant,
+        amount:amount,
+        category_name:rule ? rule.category_name : null,
+        scope:rule ? rule.scope : "shared",
+        selected:true,
+        duplicate:false,
+        matchReason:""
+      };
+
+      var csvKey = date + "|" + amount + "|" + normalizeMerchant(merchant);
+      var existing = findCsvExistingMatch(row);
+      if (csvSeen[csvKey]) {
+        row.duplicate = true;
+        row.selected = false;
+        row.matchReason = "このCSV内に同じ日・金額・利用先の明細があります";
+      } else if (existing) {
+        row.duplicate = true;
+        row.selected = false;
+        row.matchReason = existing.reason;
+      }
+      csvSeen[csvKey] = true;
+      result.push(row);
+    });
+
+    return { rows:result, ignored:ignored };
+  }
+
+  function csvReviewRow(row, index) {
+    var meta = shortDate(row.date) + " ・ " +
+      (row.category_name || "その他") + " ・ " + scopeLabel(row.scope);
+    return '<label class="csv-review-row' + (row.duplicate ? " duplicate" : "") + '">' +
+      '<input type="checkbox" data-csv-row="' + index + '"' + (row.selected ? " checked" : "") + '>' +
+      '<div class="csv-review-main"><strong>' + escapeHtml(row.merchant_name) + '</strong>' +
+      '<div class="csv-review-meta"><span>' + escapeHtml(meta) + '</span><b>' + yen(row.amount) + '</b></div>' +
+      (row.matchReason ? '<div class="csv-match-reason">' + escapeHtml(row.matchReason) + '</div>' : '') +
+      '</div></label>';
+  }
+
+  function updateCsvImportButton() {
+    var selected = state.csvRows.filter(function (row) { return row.selected; }).length;
+    var button = document.getElementById("csvImportButton");
+    button.disabled = selected === 0;
+    button.textContent = selected ? selected + "件を家計簿に反映する" : "反映する明細を選んでください";
+  }
+
+  function renderCsvReview() {
+    var newRows = [];
+    var duplicateRows = [];
+    state.csvRows.forEach(function (row, index) {
+      var item = { row:row, index:index };
+      (row.duplicate ? duplicateRows : newRows).push(item);
+    });
+
+    document.getElementById("csvNewCount").textContent = newRows.length;
+    document.getElementById("csvDuplicateCount").textContent = duplicateRows.length;
+    document.getElementById("csvNewList").innerHTML = newRows.length
+      ? newRows.map(function (x) { return csvReviewRow(x.row, x.index); }).join("")
+      : '<p class="csv-empty">未記入と思われる明細はありません。</p>';
+    document.getElementById("csvDuplicateList").innerHTML = duplicateRows.length
+      ? duplicateRows.map(function (x) { return csvReviewRow(x.row, x.index); }).join("")
+      : '<p class="csv-empty">記入済み候補はありません。</p>';
+
+    document.querySelectorAll("[data-csv-row]").forEach(function (checkbox) {
+      checkbox.onchange = function () {
+        var index = Number(checkbox.getAttribute("data-csv-row"));
+        if (state.csvRows[index]) state.csvRows[index].selected = checkbox.checked;
+        updateCsvSelectionButtons();
+        updateCsvImportButton();
+      };
+    });
+
+    updateCsvSelectionButtons();
+    updateCsvImportButton();
+  }
+
+  function updateCsvSelectionButtons() {
+    [
+      { id:"csvSelectNewButton", duplicate:false },
+      { id:"csvSelectDuplicateButton", duplicate:true }
+    ].forEach(function (config) {
+      var rows = state.csvRows.filter(function (row) {
+        return row.duplicate === config.duplicate;
+      });
+      var button = document.getElementById(config.id);
+      if (!rows.length) {
+        button.disabled = true;
+        button.textContent = "すべて選択";
+        return;
+      }
+      button.disabled = false;
+      var allSelected = rows.every(function (row) { return row.selected; });
+      button.textContent = allSelected ? "すべて外す" : "すべて選択";
+    });
+  }
+
+  function setCsvGroupSelection(duplicate, selected) {
+    state.csvRows.forEach(function (row) {
+      if (row.duplicate === duplicate) row.selected = selected;
+    });
+    renderCsvReview();
+  }
+
+  function resetCsvImport() {
+    state.csvRows = [];
+    var input = document.getElementById("csvFileInput");
+    if (input) input.value = "";
+    var review = document.getElementById("csvReviewArea");
+    if (review) review.classList.add("hidden");
+    var message = document.getElementById("csvFileMessage");
+    if (message) {
+      message.classList.remove("error");
+      message.textContent = "まだファイルは選ばれていません。";
+    }
   }
 
   function txRow(tx) {
@@ -574,6 +945,95 @@
     });
   });
 
+  document.getElementById("csvFileInput").addEventListener("change", async function (event) {
+    var file = event.target.files && event.target.files[0];
+    var message = document.getElementById("csvFileMessage");
+    var review = document.getElementById("csvReviewArea");
+
+    state.csvRows = [];
+    review.classList.add("hidden");
+    message.classList.remove("error");
+
+    if (!file) {
+      message.textContent = "まだファイルは選ばれていません。";
+      return;
+    }
+
+    message.textContent = "CSVを確認しています…";
+
+    try {
+      var buffer = await file.arrayBuffer();
+      var decoded = decodeCsvBuffer(buffer);
+      var parsed = buildCsvRows(decoded);
+      state.csvRows = parsed.rows;
+
+      if (!state.csvRows.length) {
+        throw new Error("登録できる明細が見つかりませんでした。");
+      }
+
+      message.textContent = file.name + " ・ " + state.csvRows.length + "件を読み込み" +
+        (parsed.ignored ? "（" + parsed.ignored + "行は読み取れず除外）" : "");
+      review.classList.remove("hidden");
+      renderCsvReview();
+    } catch (error) {
+      console.error(error);
+      message.classList.add("error");
+      message.textContent = error && error.message
+        ? error.message
+        : "CSVを読み込めませんでした。";
+    }
+  });
+
+  document.getElementById("csvSelectNewButton").addEventListener("click", function () {
+    var rows = state.csvRows.filter(function (row) { return !row.duplicate; });
+    var allSelected = rows.length && rows.every(function (row) { return row.selected; });
+    setCsvGroupSelection(false, !allSelected);
+  });
+
+  document.getElementById("csvSelectDuplicateButton").addEventListener("click", function () {
+    var rows = state.csvRows.filter(function (row) { return row.duplicate; });
+    var allSelected = rows.length && rows.every(function (row) { return row.selected; });
+    setCsvGroupSelection(true, !allSelected);
+  });
+
+  document.getElementById("csvImportButton").addEventListener("click", async function () {
+    var selected = state.csvRows.filter(function (row) { return row.selected; });
+    if (!selected.length) return;
+
+    var payer = document.getElementById("csvPayer").value;
+    var button = document.getElementById("csvImportButton");
+    var originalText = button.textContent;
+    button.disabled = true;
+    button.textContent = "反映しています…";
+
+    var payload = selected.map(function (row) {
+      return {
+        date:row.date,
+        merchant_name:row.merchant_name,
+        merchant_raw:row.merchant_raw,
+        amount:row.amount,
+        category_name:row.category_name,
+        scope:row.scope,
+        payer:payer,
+        memo:"CSV取込"
+      };
+    });
+
+    try {
+      await window.kakeiboDb.importCsvTransactions(payload);
+      state.data = await window.kakeiboDb.getInitialData();
+      render();
+      document.getElementById("csvImportDialog").close();
+      resetCsvImport();
+      alert(selected.length + "件を家計簿に反映しました。");
+    } catch (error) {
+      console.error(error);
+      button.disabled = false;
+      button.textContent = originalText;
+      alert("CSV明細を保存できませんでした。");
+    }
+  });
+
   document.getElementById("monthSelect").addEventListener("change", function (event) {
     state.currentMonth = event.target.value;
     setDefaultEntryDates(true);
@@ -830,6 +1290,7 @@
     state.started = false;
     state.filter = "all";
     state.currentClassifyId = null;
+    state.csvRows = [];
     state.currentMonth = defaultMonthKey();
   }
 
