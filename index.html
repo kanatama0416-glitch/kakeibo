@@ -120,7 +120,7 @@
           <h2>明細</h2>
           <p>生活費と個人支出をまとめて確認</p>
         </div>
-        <button type="button" class="soft-button csv-import-open" data-open="csvImportDialog">CSV明細を読み込む</button>
+        <button type="button" class="soft-button csv-import-open" data-open="csvImportDialog">カード明細を読み込む</button>
         <div class="chips">
           <button class="chip active" data-filter="all">すべて</button>
           <button class="chip" data-filter="shared">共同</button>
@@ -324,8 +324,8 @@
 
   <dialog id="csvImportDialog" class="csv-import-dialog">
     <div class="dialog-card">
-      <div class="dialog-head"><h3>CSV明細を読み込む</h3><button type="button" data-close-dialog>×</button></div>
-      <p class="csv-help">カード会社から出したCSVを読み込み、家計簿にすでにある明細と照合します。登録は確認後にだけ行います。</p>
+      <div class="dialog-head"><h3>カード明細を読み込む</h3><button type="button" data-close-dialog>×</button></div>
+      <p class="csv-help">カード会社から出したPDFまたはCSVを読み込み、家計簿にすでにある明細と照合します。登録は確認後にだけ行います。</p>
 
       <label>このカードを使った人
         <select id="csvPayer">
@@ -334,8 +334,8 @@
         </select>
       </label>
 
-      <label class="csv-file-label">CSVファイル
-        <input id="csvFileInput" type="file" accept=".csv,text/csv">
+      <label class="csv-file-label">明細ファイル
+        <input id="csvFileInput" type="file" accept=".pdf,.csv,application/pdf,text/csv">
       </label>
       <p id="csvFileMessage" class="csv-file-message">まだファイルは選ばれていません。</p>
 
@@ -387,8 +387,9 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
   <script src="./supabase-client.js?v=20260927-CSV2"></script>
-  <script src="./app.js?v=20260927-CSV2"></script>
+  <script src="./app.js?v=20260927-PDF1"></script>
   <script src="./auth.js?v=20260927-1426"></script>
 </body>
 </html>
