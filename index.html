@@ -165,6 +165,22 @@
           <p>月ごとの支出と、何に使ったかを比較</p>
         </div>
 
+        <div class="analysis-range-control" aria-label="分析する期間">
+          <label>
+            <span>開始月</span>
+            <select id="analysisStartMonth" aria-label="分析の開始月">
+              <option value="">読み込み中…</option>
+            </select>
+          </label>
+          <span class="analysis-range-separator">〜</span>
+          <label>
+            <span>終了月</span>
+            <select id="analysisEndMonth" aria-label="分析の終了月">
+              <option value="">読み込み中…</option>
+            </select>
+          </label>
+        </div>
+
         <article class="analysis-summary-card">
           <span id="analysisRangeLabel">読み込み中…</span>
           <strong id="analysisRangeTotal">—</strong>
@@ -174,7 +190,9 @@
 
         <h3 class="section-title">月別の使い道</h3>
         <article class="chart-card analysis-chart-card">
-          <div id="monthlyStackedChart" class="stacked-chart"></div>
+          <div class="analysis-chart-scroll">
+            <div id="monthlyStackedChart" class="stacked-chart"></div>
+          </div>
           <p id="monthlyStackedEmpty" class="chart-empty hidden">表示できる支出データがまだありません。</p>
         </article>
 
