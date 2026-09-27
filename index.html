@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#f6f7f9">
   <title>ふたり家計</title>
-  <link rel="stylesheet" href="./styles.css?v=20260927-1344">
+  <link rel="stylesheet" href="./styles.css?v=20260927-1400">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -211,6 +211,7 @@
         </select>
       </label>
       <button class="primary-button" value="save">保存</button>
+      <button id="deleteTransactionButton" class="danger-button" type="button">この明細を削除</button>
     </form>
   </dialog>
 
@@ -284,20 +285,18 @@
   <dialog id="addDialog">
     <form method="dialog" class="dialog-card">
       <div class="dialog-head"><h3>追加する</h3><button>×</button></div>
-      <div class="add-grid">
+      <div class="add-grid add-grid-two">
         <button type="button" data-switch-dialog="manualExpenseDialog">支出</button>
         <button type="button" data-switch-dialog="loanDialog">立替</button>
-        <button value="cancel">返済</button>
-        <button type="button" data-switch-dialog="initialExpenseDialog">初期費用</button>
       </div>
-      <p class="muted">支出と初期費用はここから登録できます。</p>
+      <p class="muted">日常の入力は支出と立替だけ。返済・初期費用は「貸借・返済」から管理できます。</p>
     </form>
   </dialog>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./config.js"></script>
-  <script src="./supabase-client.js?v=20260927-1344"></script>
-  <script src="./app.js?v=20260927-1344"></script>
-  <script src="./auth.js?v=20260927-1344"></script>
+  <script src="./supabase-client.js?v=20260927-1400"></script>
+  <script src="./app.js?v=20260927-1400"></script>
+  <script src="./auth.js?v=20260927-1400"></script>
 </body>
 </html>
