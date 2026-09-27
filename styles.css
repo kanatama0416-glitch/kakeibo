@@ -343,3 +343,93 @@ dialog{width:min(430px,calc(100% - 28px));border:0;border-radius:24px;padding:0;
 .settings-mini-button.danger{background:#fff1ef;color:#b5463d}
 .merchant-row-button{width:100%;text-align:left;color:var(--text);font:inherit;appearance:none}
 .merchant-row-button:active{transform:scale(.99)}
+
+
+/* content mascot placements 2026-09-27 */
+.content-mascot{
+  display:block;
+  pointer-events:none;
+  user-select:none;
+  -webkit-user-drag:none
+}
+.settlement-card{
+  position:relative;
+  overflow:hidden
+}
+.home-coin-mascot{
+  position:absolute;
+  z-index:1;
+  width:92px;
+  height:auto;
+  right:18px;
+  top:82px;
+  opacity:.96
+}
+.settlement-card .settlement-amount-label,
+.settlement-card h2,
+.settlement-card .settlement-direction,
+.settlement-card .settlement-note{
+  position:relative;
+  z-index:2;
+  max-width:calc(100% - 92px)
+}
+.settlement-card .white-button{
+  position:relative;
+  z-index:2
+}
+.csv-import-mascot-wrap{
+  position:relative;
+  margin-bottom:14px
+}
+.csv-import-mascot-wrap .csv-import-open{
+  margin-bottom:0;
+  min-height:52px;
+  padding-left:18px;
+  padding-right:100px;
+  text-align:left
+}
+.receipt-runner-mascot{
+  position:absolute;
+  z-index:2;
+  width:82px;
+  height:auto;
+  right:10px;
+  bottom:-1px
+}
+.analysis-summary-card{
+  position:relative;
+  min-height:122px;
+  padding-right:116px;
+  overflow:hidden
+}
+.analysis-ledger-mascot{
+  position:absolute;
+  width:96px;
+  height:auto;
+  right:12px;
+  bottom:7px
+}
+.money-mascot-row{
+  position:relative;
+  height:68px;
+  margin:-3px 0 -5px
+}
+.money-coin-mascot{
+  position:absolute;
+  width:98px;
+  height:auto;
+  right:6px;
+  top:-4px
+}
+@media(max-width:370px){
+  .home-coin-mascot{width:78px;right:12px;top:88px}
+  .settlement-card .settlement-amount-label,
+  .settlement-card h2,
+  .settlement-card .settlement-direction,
+  .settlement-card .settlement-note{max-width:calc(100% - 78px)}
+  .csv-import-mascot-wrap .csv-import-open{padding-right:88px}
+  .receipt-runner-mascot{width:72px;right:8px}
+  .analysis-summary-card{padding-right:100px}
+  .analysis-ledger-mascot{width:82px;right:8px}
+  .money-coin-mascot{width:86px}
+}

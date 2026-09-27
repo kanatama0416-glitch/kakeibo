@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=20260927-1508">
   <link rel="icon" type="image/png" href="./apple-touch-icon.png?v=20260927-1508">
   <link rel="manifest" href="./manifest.webmanifest?v=20260927-1508">
-  <link rel="stylesheet" href="./styles.css?v=20260927-SETTLEMENT1">
+  <link rel="stylesheet" href="./styles.css?v=20260927-CONTENTMASCOTS1">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -86,6 +86,7 @@
           <h2 id="settlementAmount">¥64,500</h2>
           <div class="settlement-direction" id="settlementDirection">うー → にゃちへ支払い</div>
           <p id="settlementNote" class="settlement-note">10/1〜10/31に使った分を集計しています。</p>
+          <img class="content-mascot home-coin-mascot" src="./assets/mascot-coin.webp?v=20260927-1" alt="" aria-hidden="true">
           <button class="white-button" type="button" data-open="breakdownDialog">内訳を見る</button>
         </article>
 
@@ -130,7 +131,10 @@
           <h2>明細</h2>
           <p>生活費と個人支出をまとめて確認</p>
         </div>
-        <button type="button" class="soft-button csv-import-open" data-open="csvImportDialog">カード明細を読み込む</button>
+        <div class="csv-import-mascot-wrap">
+          <button type="button" class="soft-button csv-import-open" data-open="csvImportDialog">カード明細を読み込む</button>
+          <img class="content-mascot receipt-runner-mascot" src="./assets/mascot-receipt.webp?v=20260927-1" alt="" aria-hidden="true">
+        </div>
         <div class="chips">
           <button class="chip active" data-filter="all">すべて</button>
           <button class="chip" data-filter="shared">共同</button>
@@ -150,6 +154,7 @@
           <span id="analysisRangeLabel">2026年10月</span>
           <strong id="analysisRangeTotal">¥0</strong>
           <small>表示期間の支出合計</small>
+          <img class="content-mascot analysis-ledger-mascot" src="./assets/mascot-ledger.webp?v=20260927-1" alt="" aria-hidden="true">
         </article>
 
         <h3 class="section-title">月別の使い道</h3>
@@ -178,6 +183,9 @@
             <div class="debt-top">
               <div><span>残り</span><strong id="debtRemaining">¥180,000</strong></div>
               <em id="repaymentBadge">今月 ¥20,000</em>
+            </div>
+            <div class="money-mascot-row">
+              <img class="content-mascot money-coin-mascot" src="./assets/mascot-coin.webp?v=20260927-1" alt="" aria-hidden="true">
             </div>
             <div class="progress"><span id="debtProgress"></span></div>
             <p id="debtMeta">総額 ¥300,000 ・ 返済済 ¥120,000</p>
