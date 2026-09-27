@@ -1284,7 +1284,7 @@
       id:null, original_amount:0, remaining_amount:0, monthly_amount:0, lender:"me", borrower:"partner"
     };
     var repaymentNet = plan.lender === "me" ? Number(plan.monthly_amount) : -Number(plan.monthly_amount);
-    var finalSettlement = livingPayNow + loanNet + repaymentNet;
+    var finalSettlement = livingPayNow + repaymentNet;
 
     return {
       total:total,
@@ -1427,16 +1427,37 @@
     renderHomeCategoryChart(summary);
     renderAnalysisChart();
 
+    var carryoverNet = Number(summary.carryInLiving || 0) - Number(summary.livingCarryOut || 0);
+    var livingBreakdownDirection = summary.livingCurrent === 0
+      ? "なし"
+      : directionText(summary.livingCurrent).replace("へ支払い","");
+    var repaymentBreakdownDirection = summary.repaymentNet === 0
+      ? "なし"
+      : directionText(summary.repaymentNet).replace("へ支払い","");
+    var carryoverBreakdownMeta;
+    if (summary.carryInLiving !== 0 && summary.livingCarryOut !== 0) {
+      carryoverBreakdownMeta =
+        "前月から " + yen(Math.abs(summary.carryInLiving)) +
+        " / 翌月へ " + yen(Math.abs(summary.livingCarryOut));
+    } else if (summary.carryInLiving !== 0) {
+      carryoverBreakdownMeta =
+        "前月から・" + directionText(summary.carryInLiving).replace("へ支払い","");
+    } else if (summary.livingCarryOut !== 0) {
+      carryoverBreakdownMeta = "翌月へ繰越";
+    } else {
+      carryoverBreakdownMeta = "なし";
+    }
+
     document.getElementById("breakdownList").innerHTML =
       '<div class="breakdown-row"><span>生活費の差額<small>' +
-      directionText(summary.livingSettlement).replace("へ支払い","") +
-      '</small></span><strong>' + yen(Math.abs(summary.livingSettlement)) + '</strong></div>' +
+      livingBreakdownDirection +
+      '</small></span><strong>' + yen(Math.abs(summary.livingCurrent)) + '</strong></div>' +
       '<div class="breakdown-row"><span>立替金返済<small>' +
-      directionText(summary.repaymentNet).replace("へ支払い","") +
+      repaymentBreakdownDirection +
       '</small></span><strong>' + yen(Math.abs(summary.repaymentNet)) + '</strong></div>' +
-      '<div class="breakdown-row"><span>立替差額<small>' +
-      directionText(summary.loanNet).replace("へ支払い","") +
-      '</small></span><strong>' + yen(Math.abs(summary.loanNet)) + '</strong></div>';
+      '<div class="breakdown-row"><span>繰越金<small>' +
+      carryoverBreakdownMeta +
+      '</small></span><strong>' + yen(Math.abs(carryoverNet)) + '</strong></div>';
 
     bindDynamicButtons();
   }
