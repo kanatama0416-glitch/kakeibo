@@ -48,7 +48,17 @@
   }
 
   function earliestAvailableMonth() {
-    return OPERATION_START_MONTH;
+    var earliest = OPERATION_START_MONTH;
+    var transactions = state && state.data && state.data.transactions
+      ? state.data.transactions
+      : [];
+
+    transactions.forEach(function (tx) {
+      var month = monthKeyFromDate(tx.date);
+      if (month && month < earliest) earliest = month;
+    });
+
+    return earliest;
   }
 
   var state = {
@@ -1244,8 +1254,8 @@
       var rowMonth = monthKeyFromDate(row.date);
       if (rowMonth < OPERATION_START_MONTH) {
         row.selected = false;
-        row.disabled = true;
-        row.matchReason = monthLabel(OPERATION_START_MONTH) + "運用開始前の明細なので反映対象外です。";
+        row.disabled = false;
+        row.matchReason = monthLabel(OPERATION_START_MONTH) + "運用開始前の明細です。必要なら選択して過去明細として反映できます。";
       } else if (paidSettlementRecord(rowMonth)) {
         row.selected = false;
         row.disabled = true;
@@ -1391,8 +1401,8 @@
       var rowMonth = monthKeyFromDate(row.date);
       if (rowMonth < OPERATION_START_MONTH) {
         row.selected = false;
-        row.disabled = true;
-        row.matchReason = monthLabel(OPERATION_START_MONTH) + "運用開始前の明細なので反映対象外です。";
+        row.disabled = false;
+        row.matchReason = monthLabel(OPERATION_START_MONTH) + "運用開始前の明細です。必要なら選択して過去明細として反映できます。";
       } else if (paidSettlementRecord(rowMonth)) {
         row.selected = false;
         row.disabled = true;
@@ -2475,7 +2485,7 @@
     var select = document.getElementById("monthSelect");
     if (!select) return;
 
-    var startMonth = OPERATION_START_MONTH;
+    var startMonth = earliestAvailableMonth();
     var endMonth = maxSelectableMonth();
     var options = [];
     var key = startMonth;
@@ -3107,8 +3117,11 @@
     var remember = document.getElementById("ruleMode").value === "merchant";
 
     if (!tx.date || !tx.merchant_name || tx.amount === 0 || !tx.category_name) return;
-    if (monthKeyFromDate(tx.date) < OPERATION_START_MONTH) {
-      alert(monthLabel(OPERATION_START_MONTH) + "運用開始前の日付には変更できません。");
+    if (
+      monthKeyFromDate(tx.date) < OPERATION_START_MONTH &&
+      monthKeyFromDate(existing.date) >= OPERATION_START_MONTH
+    ) {
+      alert(monthLabel(OPERATION_START_MONTH) + "運用開始後の明細を開始前の日付には変更できません。");
       return;
     }
 
