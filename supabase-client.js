@@ -116,7 +116,10 @@
       client.from("app_settings")
         .select("id,me_share_percent,updated_at")
         .eq("id", 1)
-        .limit(1)
+        .limit(1),
+      client.from("monthly_settlements")
+        .select("id,settlement_month,amount,paid_at,created_at,updated_at")
+        .order("settlement_month", { ascending: true })
     ]);
 
     results.forEach(function (r) {
@@ -186,7 +189,17 @@
         id:1,
         me_share_percent:50,
         updated_at:null
-      }
+      },
+      settlements: (results[8].data || []).map(function (x) {
+        return {
+          id:x.id,
+          settlement_month:x.settlement_month,
+          amount:Number(x.amount || 0),
+          paid_at:x.paid_at,
+          created_at:x.created_at,
+          updated_at:x.updated_at
+        };
+      })
     };
   }
 
@@ -569,6 +582,28 @@
     if (result.error) throw result.error;
   }
 
+  async function savePaidSettlement(settlementMonth, amount) {
+    var now = new Date().toISOString();
+    var result = await client.from("monthly_settlements")
+      .upsert({
+        settlement_month:settlementMonth + "-01",
+        amount:Number(amount || 0),
+        paid_at:now,
+        updated_at:now
+      }, { onConflict:"settlement_month" })
+      .select("id,settlement_month,amount,paid_at,created_at,updated_at")
+      .single();
+    if (result.error) throw result.error;
+    return result.data;
+  }
+
+  async function deletePaidSettlement(settlementMonth) {
+    var result = await client.from("monthly_settlements")
+      .delete()
+      .eq("settlement_month", settlementMonth + "-01");
+    if (result.error) throw result.error;
+  }
+
   window.kakeiboDb = {
     client: client,
     getSession: getSession,
@@ -597,6 +632,8 @@
     deleteCategory: deleteCategory,
     saveMerchantRule: saveMerchantRule,
     deleteMerchantRule: deleteMerchantRule,
-    updateRepaymentAmount: updateRepaymentAmount
+    updateRepaymentAmount: updateRepaymentAmount,
+    savePaidSettlement: savePaidSettlement,
+    deletePaidSettlement: deletePaidSettlement
   };
 })();
