@@ -112,7 +112,11 @@
         .order("id", { ascending: false }),
       client.from("monthly_carryovers")
         .select("id,from_month,to_month,category,amount,updated_at")
-        .order("from_month", { ascending: true })
+        .order("from_month", { ascending: true }),
+      client.from("app_settings")
+        .select("id,me_share_percent,updated_at")
+        .eq("id", 1)
+        .limit(1)
     ]);
 
     results.forEach(function (r) {
@@ -177,7 +181,12 @@
           amount:x.amount,
           updated_at:x.updated_at
         };
-      })
+      }),
+      settings: (results[7].data || [])[0] || {
+        id:1,
+        me_share_percent:50,
+        updated_at:null
+      }
     };
   }
 
@@ -312,9 +321,20 @@
       return sum + Number(x.amount || 0);
     }, 0);
 
-    // Basic household split is currently 50/50.
+    var settingsResult = await client.from("app_settings")
+      .select("me_share_percent")
+      .eq("id", 1)
+      .limit(1);
+    if (settingsResult.error) throw settingsResult.error;
+
+    var meSharePercent = Number(
+      ((settingsResult.data || [])[0] || { me_share_percent:50 }).me_share_percent
+    );
+    if (!Number.isFinite(meSharePercent)) meSharePercent = 50;
+
     // Positive means うー owes にゃち; negative means にゃち owes うー.
-    var net = Math.round(paidByMe - total / 2);
+    var myShare = Math.round(total * meSharePercent / 100);
+    var net = paidByMe - myShare;
     var originalAmount = Math.abs(net);
     var lender = net >= 0 ? "me" : "partner";
     var borrower = net >= 0 ? "partner" : "me";
@@ -439,6 +459,108 @@
     if (result.error) throw result.error;
   }
 
+  async function saveAppSettings(meSharePercent) {
+    var percent = Number(meSharePercent);
+    if (!Number.isInteger(percent) || percent < 0 || percent > 100) {
+      throw new Error("負担割合は0〜100の整数で指定してください。");
+    }
+
+    var result = await client.from("app_settings")
+      .upsert({
+        id:1,
+        me_share_percent:percent,
+        updated_at:new Date().toISOString()
+      }, { onConflict:"id" })
+      .select("id,me_share_percent,updated_at")
+      .single();
+    if (result.error) throw result.error;
+
+    await syncInitialExpenseRepaymentPlan();
+    return result.data;
+  }
+
+  async function addCategory(name) {
+    var value = String(name || "").trim();
+    if (!value) throw new Error("費目名を入力してください。");
+
+    var result = await client.from("categories")
+      .insert({ name:value, is_demo:false })
+      .select("id,name,icon")
+      .single();
+    if (result.error) throw result.error;
+    return result.data;
+  }
+
+  async function updateCategory(id, name) {
+    var value = String(name || "").trim();
+    if (!value) throw new Error("費目名を入力してください。");
+
+    var result = await client.from("categories")
+      .update({ name:value })
+      .eq("id", Number(id))
+      .select("id,name,icon")
+      .single();
+    if (result.error) throw result.error;
+    return result.data;
+  }
+
+  async function deleteCategory(id) {
+    var result = await client.from("categories")
+      .delete()
+      .eq("id", Number(id));
+    if (result.error) throw result.error;
+  }
+
+  async function saveMerchantRule(rule) {
+    var categoryId = null;
+    if (rule.mode === "auto") {
+      var categoryResult = await client.from("categories")
+        .select("id")
+        .eq("name", rule.category_name)
+        .limit(1);
+      if (categoryResult.error) throw categoryResult.error;
+      categoryId = categoryResult.data[0] ? categoryResult.data[0].id : null;
+      if (!categoryId) throw new Error("費目を選んでください。");
+    }
+
+    var payload = {
+      merchant_name:String(rule.merchant_name || "").trim(),
+      category_id:categoryId,
+      scope:rule.scope || "shared",
+      mode:rule.mode || "auto",
+      is_demo:false
+    };
+    if (!payload.merchant_name) throw new Error("店舗名を入力してください。");
+
+    var query;
+    if (rule.id) {
+      query = client.from("merchant_rules")
+        .update(payload)
+        .eq("id", Number(rule.id));
+    } else {
+      query = client.from("merchant_rules").insert(payload);
+    }
+
+    var result = await query
+      .select("id,merchant_name,scope,mode,is_demo,categories(name)")
+      .single();
+    if (result.error) throw result.error;
+    return {
+      id:result.data.id,
+      merchant_name:result.data.merchant_name,
+      category_name:categoryName(result.data),
+      scope:result.data.scope,
+      mode:result.data.mode
+    };
+  }
+
+  async function deleteMerchantRule(id) {
+    var result = await client.from("merchant_rules")
+      .delete()
+      .eq("id", Number(id));
+    if (result.error) throw result.error;
+  }
+
   async function updateRepaymentAmount(planId, amount) {
     var result = await client.from("repayment_plans")
       .update({ monthly_amount: amount })
@@ -469,6 +591,12 @@
     deleteInitialExpense: deleteInitialExpense,
     saveCarryover: saveCarryover,
     deleteCarryover: deleteCarryover,
+    saveAppSettings: saveAppSettings,
+    addCategory: addCategory,
+    updateCategory: updateCategory,
+    deleteCategory: deleteCategory,
+    saveMerchantRule: saveMerchantRule,
+    deleteMerchantRule: deleteMerchantRule,
     updateRepaymentAmount: updateRepaymentAmount
   };
 })();
