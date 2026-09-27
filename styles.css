@@ -101,3 +101,6 @@ dialog{width:min(430px,calc(100% - 28px));border:0;border-radius:24px;padding:0;
 .carryover-card .soft-button{padding:9px 6px;font-size:11px}
 .carryover-card .soft-button:disabled{opacity:.45;cursor:default}
 @media(max-width:370px){.carryover-grid{grid-template-columns:1fr}}
+
+.tx-side{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex:0 0 auto}
+.tx-edit{border:0;background:transparent;color:var(--green);font-size:10px;font-weight:900;padding:2px 0}
