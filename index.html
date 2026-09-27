@@ -236,12 +236,15 @@
           <p>費目・店舗ルール・負担割合を管理</p>
         </div>
         <div class="settings-card">
-          <button type="button"><span><strong>共同費の基本負担</strong><small>にゃち 50% / うー 50%</small></span><b>›</b></button>
-          <button type="button"><span><strong>費目</strong><small>食費・日用品・光熱費など</small></span><b>›</b></button>
-          <button type="button"><span><strong>店舗ルール</strong><small>アルビス → 食費 など</small></span><b>›</b></button>
+          <button id="shareSettingsButton" type="button"><span><strong>共同費の基本負担</strong><small id="shareSettingSummary">にゃち 50% / うー 50%</small></span><b>›</b></button>
+          <button id="categorySettingsButton" type="button"><span><strong>費目</strong><small id="categorySettingSummary">食費・日用品・光熱費など</small></span><b>›</b></button>
+          <button id="merchantSettingsButton" type="button"><span><strong>店舗ルール</strong><small id="merchantRuleSummary">店舗ごとの自動分類を管理</small></span><b>›</b></button>
         </div>
 
-        <h3 class="section-title">店舗ルール</h3>
+        <div class="settings-section-head">
+          <h3 class="section-title">店舗ルール</h3>
+          <button id="addMerchantRuleButton" class="settings-text-button" type="button">＋ 追加</button>
+        </div>
         <div id="merchantRules" class="transaction-list"></div>
       </section>
     </main>
@@ -256,6 +259,57 @@
       <button class="nav-item" data-go="settings"><span class="mascot-icon mascot-settings" aria-hidden="true"></span><small>設定</small></button>
     </nav>
   </div>
+
+  <dialog id="shareSettingsDialog">
+    <form class="dialog-card" id="shareSettingsForm">
+      <div class="dialog-head"><h3>共同費の基本負担</h3><button type="button" data-close-dialog>×</button></div>
+      <p class="settings-help">共同生活費を最終的にどの割合で負担するかを設定します。変更すると精算額と立替金の残高計算に反映されます。</p>
+      <label>にゃちの負担割合
+        <div class="percent-input"><input id="meSharePercent" type="number" min="0" max="100" step="1" required><span>%</span></div>
+      </label>
+      <div class="share-preview">
+        <span>にゃち <strong id="meSharePreview">50%</strong></span>
+        <span>うー <strong id="partnerSharePreview">50%</strong></span>
+      </div>
+      <button class="primary-button" type="submit">保存する</button>
+    </form>
+  </dialog>
+
+  <dialog id="categorySettingsDialog">
+    <div class="dialog-card settings-dialog-scroll">
+      <div class="dialog-head"><h3>費目</h3><button type="button" data-close-dialog>×</button></div>
+      <p class="settings-help">支出の分類に使う費目を追加・名前変更・削除できます。</p>
+      <form id="categoryAddForm" class="settings-inline-form">
+        <input id="newCategoryName" type="text" maxlength="40" placeholder="例：交通費" required>
+        <button type="submit">追加</button>
+      </form>
+      <div id="categorySettingsList" class="settings-manage-list"></div>
+    </div>
+  </dialog>
+
+  <dialog id="merchantRuleDialog">
+    <form class="dialog-card" id="merchantRuleForm">
+      <div class="dialog-head"><h3 id="merchantRuleDialogTitle">店舗ルールを追加</h3><button type="button" data-close-dialog>×</button></div>
+      <input id="merchantRuleId" type="hidden">
+      <label>店舗名<input id="merchantRuleName" type="text" maxlength="100" placeholder="例：アルビス" required></label>
+      <label>処理
+        <select id="merchantRuleMode">
+          <option value="auto">自動で分類する</option>
+          <option value="confirm">毎回確認する</option>
+        </select>
+      </label>
+      <label id="merchantRuleCategoryLabel">費目<select id="merchantRuleCategory"></select></label>
+      <label>支出区分
+        <select id="merchantRuleScope">
+          <option value="shared">共同生活費</option>
+          <option value="mine">にゃち個人</option>
+          <option value="partner">うー個人</option>
+        </select>
+      </label>
+      <button id="merchantRuleSaveButton" class="primary-button" type="submit">保存する</button>
+      <button id="deleteMerchantRuleButton" class="danger-button hidden" type="button">この店舗ルールを削除</button>
+    </form>
+  </dialog>
 
   <dialog id="breakdownDialog">
     <form method="dialog" class="dialog-card">
@@ -404,8 +458,8 @@
   <script src="./config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="./supabase-client.js?v=20260927-CANCELCARRY1"></script>
-  <script src="./app.js?v=20260927-RAKUTENPDF8"></script>
+  <script src="./supabase-client.js?v=20260927-SETTINGS1"></script>
+  <script src="./app.js?v=20260927-SETTINGS1"></script>
   <script src="./auth.js?v=20260927-1426"></script>
 </body>
 </html>
