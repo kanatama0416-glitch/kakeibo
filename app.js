@@ -937,7 +937,10 @@
     };
   }
 
-  async function buildPdfRows(buffer, onProgress) {
+  async function buildPdfRows(buffer, onProgress, cardCompany) {
+    if (cardCompany !== "rakuten" && cardCompany !== "epos") {
+      throw new Error("カード会社を選んでください。");
+    }
     var extracted = await extractPdfRows(buffer);
     var yearMatch = extracted.text.match(/(20\d{2})\s*年/);
     var defaultYear = yearMatch
@@ -987,30 +990,39 @@
       result.push(row);
     }
 
-    var eposMode = isEposPdf(extracted.text);
-    var eposResult = eposMode ? parseEposPdfPages(extracted.pages) : null;
+    if (cardCompany === "epos") {
+      if (/楽天カード株式会社|楽天カード/.test(extracted.text)) {
+        throw new Error("このPDFは楽天カードの明細です。カード会社を「楽天カード」に変更してください。");
+      }
 
-    if (eposMode && eposResult && eposResult.rows.length) {
+      var eposResult = parseEposPdfPages(extracted.pages);
+      if (!eposResult.rows.length) {
+        throw new Error(
+          "エポスカードの明細として読み取れませんでした。" +
+          "（候補行 " + eposResult.candidateLines + "件）"
+        );
+      }
       eposResult.rows.forEach(appendParsedPdfRow);
-    } else if (eposMode) {
-      throw new Error(
-        "エポスの明細表は確認できましたが、利用明細を読み取れませんでした。" +
-        "（候補行 " + (eposResult ? eposResult.candidateLines : 0) + "件）"
-      );
-    } else if (rakutenTextRows.length) {
-      rakutenTextRows.forEach(appendParsedPdfRow);
     } else {
-      extracted.rows.forEach(function (pdfRow) {
-        var parsed = parseRakutenPdfStatementRow(pdfRow) || parsePdfStatementRow(pdfRow, defaultYear);
-        if (!parsed) {
-          if (pdfDateMatch(pdfRow.text)) ignored += 1;
-          return;
-        }
-        appendParsedPdfRow(parsed);
-      });
+      if (isEposPdf(extracted.text)) {
+        throw new Error("このPDFはエポスカードの明細です。カード会社を「エポスカード」に変更してください。");
+      }
+
+      if (rakutenTextRows.length) {
+        rakutenTextRows.forEach(appendParsedPdfRow);
+      } else {
+        extracted.rows.forEach(function (pdfRow) {
+          var parsed = parseRakutenPdfStatementRow(pdfRow) || parsePdfStatementRow(pdfRow, defaultYear);
+          if (!parsed) {
+            if (pdfDateMatch(pdfRow.text)) ignored += 1;
+            return;
+          }
+          appendParsedPdfRow(parsed);
+        });
+      }
     }
 
-    if (!result.length) {
+    if (!result.length && cardCompany === "rakuten") {
       if (onProgress) onProgress("画像PDFとして読み取りを試しています…");
 
       var ocrExtracted = await extractPdfRowsWithOcr(buffer, onProgress);
@@ -1203,6 +1215,8 @@
 
   function resetCsvImport() {
     state.csvRows = [];
+    var company = document.getElementById("csvCardCompany");
+    if (company) company.value = "";
     var input = document.getElementById("csvFileInput");
     if (input) input.value = "";
     var review = document.getElementById("csvReviewArea");
@@ -2000,10 +2014,28 @@
     }
   });
 
+  document.getElementById("csvCardCompany").addEventListener("change", function () {
+    state.csvRows = [];
+    var input = document.getElementById("csvFileInput");
+    var review = document.getElementById("csvReviewArea");
+    var message = document.getElementById("csvFileMessage");
+    if (input) input.value = "";
+    if (review) review.classList.add("hidden");
+    if (message) {
+      message.classList.remove("error");
+      message.textContent = this.value
+        ? (this.value === "rakuten"
+          ? "楽天カードの明細ファイルを選んでください。"
+          : "エポスカードの明細ファイルを選んでください。")
+        : "先にカード会社を選んでください。";
+    }
+  });
+
   document.getElementById("csvFileInput").addEventListener("change", async function (event) {
     var file = event.target.files && event.target.files[0];
     var message = document.getElementById("csvFileMessage");
     var review = document.getElementById("csvReviewArea");
+    var cardCompany = document.getElementById("csvCardCompany").value;
 
     state.csvRows = [];
     review.classList.add("hidden");
@@ -2011,6 +2043,13 @@
 
     if (!file) {
       message.textContent = "まだファイルは選ばれていません。";
+      return;
+    }
+
+    if (!cardCompany) {
+      message.classList.add("error");
+      message.textContent = "先にカード会社を選んでください。";
+      event.target.value = "";
       return;
     }
 
@@ -2033,7 +2072,7 @@
       if (isPdf) {
         parsed = await buildPdfRows(buffer, function (progressText) {
           message.textContent = progressText;
-        });
+        }, cardCompany);
       } else {
         var decoded = decodeCsvBuffer(buffer);
         parsed = buildCsvRows(decoded);
