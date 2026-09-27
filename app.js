@@ -61,7 +61,8 @@
     return '<div class="transaction-row">' +
       '<div class="tx-icon">' + iconFor(tx) + '</div>' +
       '<div class="tx-main"><strong>' + escapeHtml(tx.merchant_name) + '</strong><small>' + sub + '</small></div>' +
-      '<div class="tx-amount">' + yen(tx.amount) + '</div></div>';
+      '<div class="tx-side"><div class="tx-amount">' + yen(tx.amount) + '</div>' +
+      '<button type="button" class="tx-edit" data-edit-tx="' + tx.id + '">編集</button></div></div>';
   }
 
   function carryInAmount(category) {
@@ -295,32 +296,57 @@
     bindDynamicButtons();
   }
 
+  function openTransactionEditor(id, mode) {
+    var tx = state.data.transactions.find(function (x) {
+      return Number(x.id) === Number(id);
+    });
+    if (!tx) return;
+
+    state.currentClassifyId = Number(id);
+    document.getElementById("classifyId").value = Number(id);
+    document.getElementById("classifyTitle").textContent =
+      escapeHtml(tx.merchant_name) + (mode === "classify" ? " を分類" : " を編集");
+
+    var categorySelect = document.getElementById("classifyCategory");
+    var scopeSelect = document.getElementById("classifyScope");
+    var ruleSelect = document.getElementById("ruleMode");
+
+    if (tx.category_name) categorySelect.value = tx.category_name;
+    scopeSelect.value = tx.scope || "shared";
+    ruleSelect.value = "once";
+
+    document.getElementById("classifyDialog").showModal();
+  }
+
   function bindDynamicButtons() {
     document.querySelectorAll("[data-classify]").forEach(function (button) {
       button.onclick = function () {
-        var id = Number(button.getAttribute("data-classify"));
-        state.currentClassifyId = id;
-        var tx = state.data.transactions.find(function (x) {
-          return Number(x.id) === id;
-        });
-        document.getElementById("classifyId").value = id;
-        document.getElementById("classifyTitle").textContent =
-          (tx ? tx.merchant_name : "明細") + " を分類";
-        document.getElementById("classifyDialog").showModal();
+        openTransactionEditor(Number(button.getAttribute("data-classify")), "classify");
+      };
+    });
+
+    document.querySelectorAll("[data-edit-tx]").forEach(function (button) {
+      button.onclick = function () {
+        openTransactionEditor(Number(button.getAttribute("data-edit-tx")), "edit");
       };
     });
 
     document.querySelectorAll("[data-personal]").forEach(function (button) {
-      button.onclick = function () {
+      button.onclick = async function () {
         var id = Number(button.getAttribute("data-personal"));
         var tx = state.data.transactions.find(function (x) {
           return Number(x.id) === id;
         });
-        if (tx) {
-          tx.scope = "mine";
-          tx.category_name = tx.category_name || "その他";
-          tx.status = "confirmed";
+        if (!tx) return;
+
+        var category = tx.category_name || "その他";
+        try {
+          await window.kakeiboDb.classifyTransaction(id, category, "mine", false);
+          state.data = await window.kakeiboDb.getInitialData();
           render();
+        } catch (e) {
+          console.error(e);
+          alert("個人支出への変更を保存できませんでした。");
         }
       };
     });
@@ -443,10 +469,12 @@
 
     try {
       await window.kakeiboDb.classifyTransaction(id, category, scope, remember);
+      state.data = await window.kakeiboDb.getInitialData();
+      render();
     } catch (e) {
       console.error(e);
+      alert("明細の変更を保存できませんでした。");
     }
-    setTimeout(render, 0);
   });
 
   document.getElementById("loanForm").addEventListener("submit", async function () {
