@@ -1,6 +1,6 @@
 (function () {
   var OPERATION_START_MONTH = "2026-10";
-  var REPAYMENT_START_MONTH = "2026-10";
+  var REPAYMENT_START_MONTH = "2026-09";
 
   function monthKeyFromDate(value) {
     return value ? String(value).slice(0, 7) : "";
