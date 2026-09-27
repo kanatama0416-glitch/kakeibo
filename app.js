@@ -256,10 +256,12 @@
       initialExpenses.map(function (x) {
         var detail = shortDate(x.date) + " ・ " +
           (x.payer === "me" ? "にゃちが支払い" : "うーが支払い");
-        return '<div class="transaction-row"><div class="tx-icon">⌂</div>' +
+        return '<button type="button" class="transaction-row transaction-edit-row" data-edit-initial-expense="' + x.id + '">' +
+          '<div class="tx-icon">↔</div>' +
           '<div class="tx-main"><strong>' + escapeHtml(x.item_name) + '</strong><small>' +
           detail + (x.memo ? " ・ " + escapeHtml(x.memo) : "") +
-          '</small></div><div class="tx-amount">' + yen(x.amount) + '</div></div>';
+          '</small></div><div class="tx-side"><div class="tx-amount">' + yen(x.amount) + '</div>' +
+          '<span class="tx-edit-label">編集 ›</span></div></button>';
       }).join("");
 
     document.getElementById("merchantRules").innerHTML =
@@ -286,7 +288,7 @@
       '<div class="breakdown-row"><span>生活費の差額<small>' +
       directionText(summary.livingSettlement).replace("へ支払い","") +
       '</small></span><strong>' + yen(Math.abs(summary.livingSettlement)) + '</strong></div>' +
-      '<div class="breakdown-row"><span>初期費用返済<small>' +
+      '<div class="breakdown-row"><span>立替金返済<small>' +
       directionText(summary.repaymentNet).replace("へ支払い","") +
       '</small></span><strong>' + yen(Math.abs(summary.repaymentNet)) + '</strong></div>' +
       '<div class="breakdown-row"><span>立替差額<small>' +
@@ -318,6 +320,34 @@
     document.getElementById("classifyDialog").showModal();
   }
 
+  function openInitialExpenseEditor(id) {
+    var expense = (state.data.initial_expenses || []).find(function (x) {
+      return Number(x.id) === Number(id);
+    });
+    if (!expense) return;
+
+    document.getElementById("initialExpenseId").value = expense.id;
+    document.getElementById("initialExpenseDialogTitle").textContent = expense.item_name + " を編集";
+    document.getElementById("initialExpenseItem").value = expense.item_name || "";
+    document.getElementById("initialExpenseAmount").value = expense.amount || "";
+    document.getElementById("initialExpensePayer").value = expense.payer || "me";
+    document.getElementById("initialExpenseDate").value = expense.date || "";
+    document.getElementById("initialExpenseMemo").value = expense.memo || "";
+    document.getElementById("initialExpenseSaveButton").textContent = "変更を保存";
+    document.getElementById("deleteInitialExpenseButton").classList.remove("hidden");
+    document.getElementById("initialExpenseDialog").showModal();
+  }
+
+  function openInitialExpenseAdd() {
+    document.getElementById("initialExpenseForm").reset();
+    document.getElementById("initialExpenseId").value = "";
+    document.getElementById("initialExpenseDialogTitle").textContent = "立替金を追加";
+    document.getElementById("initialExpenseSaveButton").textContent = "保存する";
+    document.getElementById("deleteInitialExpenseButton").classList.add("hidden");
+    setDefaultEntryDates(true);
+    document.getElementById("initialExpenseDialog").showModal();
+  }
+
   function bindDynamicButtons() {
     document.querySelectorAll("[data-classify]").forEach(function (button) {
       button.onclick = function () {
@@ -328,6 +358,12 @@
     document.querySelectorAll("[data-edit-tx]").forEach(function (button) {
       button.onclick = function () {
         openTransactionEditor(Number(button.getAttribute("data-edit-tx")), "edit");
+      };
+    });
+
+    document.querySelectorAll("[data-edit-initial-expense]").forEach(function (button) {
+      button.onclick = function () {
+        openInitialExpenseEditor(Number(button.getAttribute("data-edit-initial-expense")));
       };
     });
 
@@ -386,6 +422,12 @@
     button.addEventListener("click", function () {
       var dialog = document.getElementById(button.getAttribute("data-open"));
       if (dialog) dialog.showModal();
+    });
+  });
+
+  document.querySelectorAll("[data-open-initial-expense]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      openInitialExpenseAdd();
     });
   });
 
@@ -555,6 +597,7 @@
   });
 
   document.getElementById("initialExpenseForm").addEventListener("submit", async function () {
+    var id = Number(document.getElementById("initialExpenseId").value || 0);
     var expense = {
       item_name: document.getElementById("initialExpenseItem").value.trim(),
       amount: Number(document.getElementById("initialExpenseAmount").value || 0),
@@ -566,14 +609,43 @@
     if (!expense.item_name || !expense.date || expense.amount <= 0) return;
 
     try {
-      await window.kakeiboDb.addInitialExpense(expense);
+      if (id) {
+        await window.kakeiboDb.updateInitialExpense(id, expense);
+      } else {
+        await window.kakeiboDb.addInitialExpense(expense);
+      }
       state.data = await window.kakeiboDb.getInitialData();
       document.getElementById("initialExpenseForm").reset();
+      document.getElementById("initialExpenseId").value = "";
+      document.getElementById("deleteInitialExpenseButton").classList.add("hidden");
       setDefaultEntryDates();
       render();
     } catch (e) {
       console.error(e);
-      alert("初期費用を保存できませんでした。");
+      alert("立替金を保存できませんでした。");
+    }
+  });
+
+  document.getElementById("deleteInitialExpenseButton").addEventListener("click", async function () {
+    var id = Number(document.getElementById("initialExpenseId").value || 0);
+    var expense = (state.data.initial_expenses || []).find(function (x) {
+      return Number(x.id) === id;
+    });
+    if (!id || !expense) return;
+
+    var ok = window.confirm("「" + expense.item_name + "」" + yen(expense.amount) + " を削除しますか？\n返済残高も再計算されます。");
+    if (!ok) return;
+
+    try {
+      await window.kakeiboDb.deleteInitialExpense(id);
+      document.getElementById("initialExpenseDialog").close();
+      document.getElementById("initialExpenseForm").reset();
+      document.getElementById("initialExpenseId").value = "";
+      state.data = await window.kakeiboDb.getInitialData();
+      render();
+    } catch (e) {
+      console.error(e);
+      alert("立替金を削除できませんでした。");
     }
   });
 
