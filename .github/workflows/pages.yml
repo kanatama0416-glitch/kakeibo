@@ -29,6 +29,11 @@ jobs:
         with:
           enablement: true
 
+      - name: Decode app icon
+        run: |
+          base64 --decode assets/app-icon-180.png.b64 > assets/app-icon-180.png
+          rm assets/app-icon-180.png.b64
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
