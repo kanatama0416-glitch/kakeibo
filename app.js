@@ -57,7 +57,9 @@
     csvRows: [],
     importFileType: "csv",
     started: false,
-    currentMonth: defaultMonthKey()
+    currentMonth: defaultMonthKey(),
+    analysisStartMonth: null,
+    analysisEndMonth: null
   };
 
   function yen(value) {
@@ -1591,13 +1593,79 @@
     return map;
   }
 
+  function defaultAnalysisRange() {
+    var end = state.currentMonth;
+    var start = end;
+
+    for (var i = 0; i < 5; i += 1) {
+      var previous = addMonths(start, -1);
+      if (previous < earliestAvailableMonth()) break;
+      start = previous;
+    }
+
+    return { start:start, end:end };
+  }
+
+  function ensureAnalysisRange() {
+    var minMonth = earliestAvailableMonth();
+    var maxMonth = maxSelectableMonth();
+    var fallback = defaultAnalysisRange();
+
+    if (!state.analysisStartMonth) state.analysisStartMonth = fallback.start;
+    if (!state.analysisEndMonth) state.analysisEndMonth = fallback.end;
+
+    state.analysisStartMonth = state.analysisStartMonth < minMonth
+      ? minMonth
+      : (state.analysisStartMonth > maxMonth ? maxMonth : state.analysisStartMonth);
+    state.analysisEndMonth = state.analysisEndMonth < minMonth
+      ? minMonth
+      : (state.analysisEndMonth > maxMonth ? maxMonth : state.analysisEndMonth);
+
+    if (state.analysisStartMonth > state.analysisEndMonth) {
+      state.analysisStartMonth = state.analysisEndMonth;
+    }
+  }
+
+  function analysisRangeOptions() {
+    var options = [];
+    var key = earliestAvailableMonth();
+    var end = maxSelectableMonth();
+    var guard = 0;
+
+    while (key <= end && guard < 120) {
+      options.push('<option value="' + key + '">' + fullMonthLabel(key) + '</option>');
+      key = addMonths(key, 1);
+      guard += 1;
+    }
+    return options.join("");
+  }
+
+  function syncAnalysisRangeControls() {
+    ensureAnalysisRange();
+
+    var startSelect = document.getElementById("analysisStartMonth");
+    var endSelect = document.getElementById("analysisEndMonth");
+    if (!startSelect || !endSelect) return;
+
+    var options = analysisRangeOptions();
+    if (startSelect.innerHTML !== options) startSelect.innerHTML = options;
+    if (endSelect.innerHTML !== options) endSelect.innerHTML = options;
+
+    startSelect.value = state.analysisStartMonth;
+    endSelect.value = state.analysisEndMonth;
+  }
+
   function analysisMonths() {
+    ensureAnalysisRange();
+
     var months = [];
-    var cursor = state.currentMonth;
-    for (var i = 0; i < 6; i += 1) {
-      if (cursor < earliestAvailableMonth()) break;
-      months.unshift(cursor);
-      cursor = addMonths(cursor, -1);
+    var cursor = state.analysisStartMonth;
+    var guard = 0;
+
+    while (cursor <= state.analysisEndMonth && guard < 120) {
+      months.push(cursor);
+      cursor = addMonths(cursor, 1);
+      guard += 1;
     }
     return months;
   }
@@ -1630,6 +1698,7 @@
   }
 
   function renderAnalysisChart() {
+    syncAnalysisRangeControls();
     var months = analysisMonths();
     var rows = months.map(function (month) {
       var txs = state.data.transactions.filter(function (t) {
@@ -1662,11 +1731,12 @@
 
     document.getElementById("analysisRangeLabel").textContent =
       months.length > 1
-        ? months[0].replace("-", "年") + "月〜" + monthLabel(months[months.length - 1])
-        : (months[0] ? months[0].replace("-", "年") + "月" : "");
+        ? fullMonthLabel(months[0]) + "〜" + fullMonthLabel(months[months.length - 1])
+        : (months[0] ? fullMonthLabel(months[0]) : "");
     document.getElementById("analysisRangeTotal").textContent = yen(rangeTotal);
 
     var chart = document.getElementById("monthlyStackedChart");
+    chart.style.minWidth = Math.max(100, months.length * 74) + "px";
     var empty = document.getElementById("monthlyStackedEmpty");
     var legend = document.getElementById("analysisLegend");
 
@@ -2715,6 +2785,22 @@
     render();
   });
 
+  document.getElementById("analysisStartMonth").addEventListener("change", function (event) {
+    state.analysisStartMonth = event.target.value;
+    if (state.analysisStartMonth > state.analysisEndMonth) {
+      state.analysisEndMonth = state.analysisStartMonth;
+    }
+    renderAnalysisChart();
+  });
+
+  document.getElementById("analysisEndMonth").addEventListener("change", function (event) {
+    state.analysisEndMonth = event.target.value;
+    if (state.analysisEndMonth < state.analysisStartMonth) {
+      state.analysisStartMonth = state.analysisEndMonth;
+    }
+    renderAnalysisChart();
+  });
+
   document.getElementById("payCurrentSettlementButton").addEventListener("click", async function () {
     var sourceMonth = addMonths(state.currentMonth, -1);
     if (sourceMonth < OPERATION_START_MONTH || state.currentMonth > actualMonthKey()) return;
@@ -3115,6 +3201,7 @@
     try {
       state.data = await window.kakeiboDb.getInitialData();
       initMonthSelect();
+      syncAnalysisRangeControls();
       setDefaultEntryDates();
       render();
     } catch (error) {
@@ -3132,6 +3219,8 @@
     state.csvRows = [];
     state.importFileType = "csv";
     state.currentMonth = defaultMonthKey();
+    state.analysisStartMonth = null;
+    state.analysisEndMonth = null;
   }
 
   window.KakeiboApp = {
