@@ -537,6 +537,43 @@
     return /エポスカード|EPOS|MARUI GROUP/i.test(normalizeText(text));
   }
 
+  function parseEposPdfText(text) {
+    var source = normalizeText(text).replace(/\s+/g, " ");
+    var rows = [];
+    var pattern = /(?:^|\s)(\d{2})\s+(\d{2})\s+(\d{2})\s+(.{2,120}?)\s+([0-9][0-9,]*)\s+(?:１|1)回\s+(\d+)\s+([0-9][0-9,]*)(?=\s|$)/g;
+    var match;
+
+    while ((match = pattern.exec(source)) !== null) {
+      var year = Number(match[1]);
+      var month = Number(match[2]);
+      var day = Number(match[3]);
+      if (month < 1 || month > 12 || day < 1 || day > 31) continue;
+
+      var merchant = cleanPdfMerchant(match[4])
+        .replace(/\s{2,}/g, " ")
+        .trim();
+      var amount = parsePdfAmountToken(match[5]);
+
+      if (!merchant || merchant.length < 2 || !amount) continue;
+
+      var date = parseCsvDate(
+        (2000 + year) + "/" +
+        String(month).padStart(2, "0") + "/" +
+        String(day).padStart(2, "0")
+      );
+      if (!date) continue;
+
+      rows.push({
+        date:date,
+        merchant_name:merchant,
+        merchant_raw:match[0].trim(),
+        amount:amount
+      });
+    }
+
+    return rows;
+  }
+
   function parseEposPdfPages(pages) {
     var parsedRows = [];
     var candidateLines = 0;
@@ -995,14 +1032,18 @@
         throw new Error("このPDFは楽天カードの明細です。カード会社を「楽天カード」に変更してください。");
       }
 
+      var eposTextRows = parseEposPdfText(extracted.text);
       var eposResult = parseEposPdfPages(extracted.pages);
-      if (!eposResult.rows.length) {
+      var eposRows = eposTextRows.length ? eposTextRows : eposResult.rows;
+
+      if (!eposRows.length) {
         throw new Error(
           "エポスカードの明細として読み取れませんでした。" +
-          "（候補行 " + eposResult.candidateLines + "件）"
+          "（テキスト候補 " + eposTextRows.length +
+          "件 / 座標候補 " + eposResult.candidateLines + "件）"
         );
       }
-      eposResult.rows.forEach(appendParsedPdfRow);
+      eposRows.forEach(appendParsedPdfRow);
     } else {
       if (isEposPdf(extracted.text)) {
         throw new Error("このPDFはエポスカードの明細です。カード会社を「エポスカード」に変更してください。");
