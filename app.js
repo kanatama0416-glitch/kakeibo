@@ -167,11 +167,12 @@
           '</small></div><b>›</b></div>';
       }).join("");
 
-    document.getElementById("classifyCategory").innerHTML =
-      state.data.categories.map(function (c) {
-        return '<option value="' + escapeHtml(c.name) + '">' +
-          escapeHtml(c.name) + '</option>';
-      }).join("");
+    var categoryOptions = state.data.categories.map(function (c) {
+      return '<option value="' + escapeHtml(c.name) + '">' +
+        escapeHtml(c.name) + '</option>';
+    }).join("");
+    document.getElementById("classifyCategory").innerHTML = categoryOptions;
+    document.getElementById("manualExpenseCategory").innerHTML = categoryOptions;
 
     document.getElementById("settlementAmount").textContent =
       yen(Math.abs(summary.finalSettlement));
@@ -298,6 +299,31 @@
     setTimeout(render, 0);
   });
 
+  document.getElementById("manualExpenseForm").addEventListener("submit", async function () {
+    var tx = {
+      date: document.getElementById("manualExpenseDate").value,
+      merchant_name: document.getElementById("manualExpenseName").value.trim(),
+      amount: Number(document.getElementById("manualExpenseAmount").value || 0),
+      category_name: document.getElementById("manualExpenseCategory").value,
+      scope: document.getElementById("manualExpenseScope").value,
+      payer: document.getElementById("manualExpensePayer").value,
+      memo: document.getElementById("manualExpenseMemo").value.trim()
+    };
+
+    if (!tx.date || !tx.merchant_name || tx.amount < 0 || !tx.category_name) return;
+
+    try {
+      await window.kakeiboDb.addManualTransaction(tx);
+      state.data = await window.kakeiboDb.getInitialData();
+      document.getElementById("manualExpenseForm").reset();
+      setDefaultEntryDates();
+      render();
+    } catch (e) {
+      console.error(e);
+      alert("支出を保存できませんでした。");
+    }
+  });
+
   document.getElementById("initialExpenseForm").addEventListener("submit", async function () {
     var expense = {
       item_name: document.getElementById("initialExpenseItem").value.trim(),
@@ -313,7 +339,7 @@
       await window.kakeiboDb.addInitialExpense(expense);
       state.data = await window.kakeiboDb.getInitialData();
       document.getElementById("initialExpenseForm").reset();
-      setDefaultInitialExpenseDate();
+      setDefaultEntryDates();
       render();
     } catch (e) {
       console.error(e);
@@ -321,12 +347,14 @@
     }
   });
 
-  function setDefaultInitialExpenseDate() {
-    var input = document.getElementById("initialExpenseDate");
-    if (!input || input.value) return;
+  function setDefaultEntryDates() {
     var now = new Date();
     var local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
-    input.value = local.toISOString().slice(0, 10);
+    var today = local.toISOString().slice(0, 10);
+    ["manualExpenseDate", "initialExpenseDate"].forEach(function (id) {
+      var input = document.getElementById(id);
+      if (input && !input.value) input.value = today;
+    });
   }
 
   document.getElementById("repaymentForm").addEventListener("submit", async function () {
@@ -353,7 +381,7 @@
 
     try {
       state.data = await window.kakeiboDb.getInitialData();
-      setDefaultInitialExpenseDate();
+      setDefaultEntryDates();
       render();
     } catch (error) {
       state.started = false;
