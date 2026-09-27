@@ -98,11 +98,6 @@
     }
   }
 
-  async function accountStatus(email) {
-    var status = await window.kakeiboDb.getAccountStatus(email);
-    return String(status || "");
-  }
-
   loginForm.addEventListener("submit", async function (event) {
     event.preventDefault();
 
@@ -114,16 +109,6 @@
     try {
       loginButton.disabled = true;
       setMessage("ログインしています…");
-
-      var status = await accountStatus(email);
-      if (status === "not_allowed") {
-        showLogin("このメールアドレスではログインできません。");
-        return;
-      }
-      if (status === "new") {
-        showLogin("まだ初回設定が済んでいません。「初めて使う・パスワードを設定」から登録してください。");
-        return;
-      }
 
       await window.kakeiboDb.signInWithPassword(email, password);
       await showApp();
@@ -163,24 +148,6 @@
       setupSubmitButton.disabled = true;
       setMessage("確認しています…");
 
-      var status = await accountStatus(email);
-
-      if (status === "not_allowed") {
-        setupSubmitButton.disabled = false;
-        setMessage("このメールアドレスは登録対象ではありません。");
-        return;
-      }
-
-      if (status === "existing") {
-        await window.kakeiboDb.sendPasswordReset(email);
-        setupSubmitButton.disabled = false;
-        setMessage(
-          "このメールアドレスは登録済みです。パスワード設定用メールを送りました。メールのリンクから新しいパスワードを設定してください。",
-          "success"
-        );
-        return;
-      }
-
       await window.kakeiboDb.signUpWithPassword(email, password);
       setupSubmitButton.disabled = false;
       setMessage(
@@ -205,16 +172,6 @@
     try {
       forgotButton.disabled = true;
       setMessage("確認しています…");
-
-      var status = await accountStatus(email);
-      if (status === "not_allowed") {
-        setMessage("このメールアドレスではログインできません。");
-        return;
-      }
-      if (status === "new") {
-        setMessage("まだ初回設定が済んでいません。「初めて使う・パスワードを設定」から登録してください。");
-        return;
-      }
 
       await window.kakeiboDb.sendPasswordReset(email);
       setMessage("パスワード再設定メールを送りました。メールのリンクから新しいパスワードを設定してください。", "success");
