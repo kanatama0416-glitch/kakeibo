@@ -513,6 +513,32 @@
       .replace(/\s{2,}/g, " ");
   }
 
+  function parseRakutenPdfText(text) {
+    var source = normalizeText(text).replace(/\s+/g, " ");
+    var rows = [];
+    var pattern = /(20\d{2}[\/\.\-]\d{1,2}[\/\.\-]\d{1,2})\s+(.{2,100}?)\s+(?:本人\*?|家族\*?)\s+(?:1回払い|一括払い|分割払い|リボ払い|ボーナス払い)\s+([0-9][0-9,]*)/g;
+    var match;
+
+    while ((match = pattern.exec(source)) !== null) {
+      var date = parseCsvDate(match[1]);
+      var merchant = cleanPdfMerchant(match[2])
+        .replace(/利用国[A-Z]{3}/g, "")
+        .replace(/\s{2,}/g, " ")
+        .trim();
+      var amount = parseCsvAmount(match[3]);
+
+      if (!date || !merchant || !amount) continue;
+      rows.push({
+        date:date,
+        merchant_name:merchant,
+        merchant_raw:match[0],
+        amount:amount
+      });
+    }
+
+    return rows;
+  }
+
   function parseRakutenPdfStatementRow(row) {
     if (!row || !row.items || !row.items.length) return null;
 
@@ -667,12 +693,10 @@
     var ignored = 0;
     var seen = {};
 
-    extracted.rows.forEach(function (pdfRow) {
-      var parsed = parseRakutenPdfStatementRow(pdfRow) || parsePdfStatementRow(pdfRow, defaultYear);
-      if (!parsed) {
-        if (pdfDateMatch(pdfRow.text)) ignored += 1;
-        return;
-      }
+    var rakutenTextRows = parseRakutenPdfText(extracted.text);
+
+    function appendParsedPdfRow(parsed) {
+      if (!parsed) return;
 
       var rule = csvMerchantRule(parsed.merchant_name);
       var row = {
@@ -702,7 +726,25 @@
 
       seen[key] = true;
       result.push(row);
-    });
+    }
+
+    if (rakutenTextRows.length) {
+      rakutenTextRows.forEach(appendParsedPdfRow);
+    } else {
+      extracted.rows.forEach(function (pdfRow) {
+        var parsed = parseRakutenPdfStatementRow(pdfRow) || parsePdfStatementRow(pdfRow, defaultYear);
+      if (!parsed) {
+        if (pdfDateMatch(pdfRow.text)) ignored += 1;
+        return;
+      }
+
+        if (!parsed) {
+          if (pdfDateMatch(pdfRow.text)) ignored += 1;
+          return;
+        }
+        appendParsedPdfRow(parsed);
+      });
+    }
 
     if (!result.length) {
       if (onProgress) onProgress("画像PDFとして読み取りを試しています…");
@@ -716,7 +758,11 @@
       ignored = 0;
       seen = {};
 
-      ocrExtracted.rows.forEach(function (pdfRow) {
+      var rakutenOcrRows = parseRakutenPdfText(ocrExtracted.text);
+      if (rakutenOcrRows.length) {
+        rakutenOcrRows.forEach(appendParsedPdfRow);
+      } else {
+        ocrExtracted.rows.forEach(function (pdfRow) {
         var parsed = parseRakutenPdfStatementRow(pdfRow) || parsePdfStatementRow(pdfRow, ocrDefaultYear);
         if (!parsed) {
           if (pdfDateMatch(pdfRow.text)) ignored += 1;
@@ -748,7 +794,8 @@
 
         seen[key] = true;
         result.push(row);
-      });
+        });
+      }
 
       if (!result.length) {
         throw new Error("PDFの文字読み取りはできましたが、利用日・利用先・金額を明細として判定できませんでした。");
