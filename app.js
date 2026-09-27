@@ -36,6 +36,27 @@
     return key < OPERATION_START_MONTH ? OPERATION_START_MONTH : key;
   }
 
+  function earliestAvailableMonth() {
+    var earliest = OPERATION_START_MONTH;
+    if (!state.data) return earliest;
+
+    var datedCollections = [
+      state.data.transactions || [],
+      state.data.loans || [],
+      state.data.initial_expenses || []
+    ];
+
+    datedCollections.forEach(function (items) {
+      items.forEach(function (item) {
+        var value = item.date || item.transaction_date || item.expense_date;
+        var key = monthKeyFromDate(value);
+        if (key && key < earliest) earliest = key;
+      });
+    });
+
+    return earliest;
+  }
+
   var state = {
     data: null,
     filter: "all",
@@ -1340,7 +1361,7 @@
     var months = [];
     var cursor = state.currentMonth;
     for (var i = 0; i < 6; i += 1) {
-      if (cursor < OPERATION_START_MONTH) break;
+      if (cursor < earliestAvailableMonth()) break;
       months.unshift(cursor);
       cursor = addMonths(cursor, -1);
     }
@@ -1904,12 +1925,20 @@
     var select = document.getElementById("monthSelect");
     if (!select) return;
 
+    var startMonth = earliestAvailableMonth();
+    var endMonth = addMonths(OPERATION_START_MONTH, 59);
+    if (state.currentMonth > endMonth) endMonth = state.currentMonth;
+
     var options = [];
-    for (var i = 0; i < 60; i += 1) {
-      var key = addMonths(OPERATION_START_MONTH, i);
+    var key = startMonth;
+    var guard = 0;
+    while (key <= endMonth && guard < 120) {
       options.push('<option value="' + key + '">' +
-        key.split("-")[0] + "年" + Number(key.split("-")[1]) + "月分</option>");
+        key.split("-")[0] + "年" + Number(key.split("-")[1]) + "月</option>");
+      key = addMonths(key, 1);
+      guard += 1;
     }
+
     select.innerHTML = options.join("");
     select.value = state.currentMonth;
   }
@@ -2193,11 +2222,26 @@
 
     try {
       await window.kakeiboDb.importCsvTransactions(payload);
+
+      var importedMonths = selected.map(function (row) {
+        return monthKeyFromDate(row.date);
+      }).filter(Boolean).sort();
+      var latestImportedMonth = importedMonths.length
+        ? importedMonths[importedMonths.length - 1]
+        : state.currentMonth;
+
       state.data = await window.kakeiboDb.getInitialData();
+      state.currentMonth = latestImportedMonth;
+      initMonthSelect();
+      setDefaultEntryDates(true);
       render();
       document.getElementById("csvImportDialog").close();
       resetCsvImport();
-      alert(selected.length + "件を家計簿に反映しました。");
+      go("transactions");
+      alert(
+        selected.length + "件を家計簿に反映しました。" +
+        (latestImportedMonth ? " " + monthLabel(latestImportedMonth) + "を表示します。" : "")
+      );
     } catch (error) {
       console.error(error);
       button.disabled = false;
@@ -2496,8 +2540,8 @@
     state.started = true;
 
     try {
-      initMonthSelect();
       state.data = await window.kakeiboDb.getInitialData();
+      initMonthSelect();
       setDefaultEntryDates();
       render();
     } catch (error) {
