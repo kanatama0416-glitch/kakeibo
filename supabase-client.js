@@ -119,7 +119,11 @@
         .limit(1),
       client.from("monthly_settlements")
         .select("id,settlement_month,amount,paid_at,created_at,updated_at")
-        .order("settlement_month", { ascending: true })
+        .order("settlement_month", { ascending: true }),
+      client.from("repayments")
+        .select("id,repayment_plan_id,repayment_date,amount,is_demo,created_at")
+        .eq("is_demo", false)
+        .order("repayment_date", { ascending: true })
     ]);
 
     results.forEach(function (r) {
@@ -198,6 +202,15 @@
           paid_at:x.paid_at,
           created_at:x.created_at,
           updated_at:x.updated_at
+        };
+      }),
+      repayments: (results[9].data || []).map(function (x) {
+        return {
+          id:x.id,
+          repayment_plan_id:x.repayment_plan_id,
+          repayment_date:x.repayment_date,
+          amount:Number(x.amount || 0),
+          created_at:x.created_at
         };
       })
     };
@@ -582,25 +595,19 @@
     if (result.error) throw result.error;
   }
 
-  async function savePaidSettlement(settlementMonth, amount) {
-    var now = new Date().toISOString();
-    var result = await client.from("monthly_settlements")
-      .upsert({
-        settlement_month:settlementMonth + "-01",
-        amount:Number(amount || 0),
-        paid_at:now,
-        updated_at:now
-      }, { onConflict:"settlement_month" })
-      .select("id,settlement_month,amount,paid_at,created_at,updated_at")
-      .single();
+  async function savePaidSettlement(settlementMonth, amount, repaymentAmount) {
+    var result = await client.rpc("save_monthly_settlement_with_repayment", {
+      p_settlement_month:settlementMonth + "-01",
+      p_amount:Number(amount || 0),
+      p_repayment_amount:Number(repaymentAmount || 0)
+    });
     if (result.error) throw result.error;
-    return result.data;
   }
 
   async function deletePaidSettlement(settlementMonth) {
-    var result = await client.from("monthly_settlements")
-      .delete()
-      .eq("settlement_month", settlementMonth + "-01");
+    var result = await client.rpc("delete_monthly_settlement_with_repayment", {
+      p_settlement_month:settlementMonth + "-01"
+    });
     if (result.error) throw result.error;
   }
 
