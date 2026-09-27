@@ -305,7 +305,7 @@
     state.currentClassifyId = Number(id);
     document.getElementById("classifyId").value = Number(id);
     document.getElementById("classifyTitle").textContent =
-      escapeHtml(tx.merchant_name) + (mode === "classify" ? " を分類" : " を編集");
+      tx.merchant_name + (mode === "classify" ? " を分類" : " を編集");
 
     var categorySelect = document.getElementById("classifyCategory");
     var scopeSelect = document.getElementById("classifyScope");
