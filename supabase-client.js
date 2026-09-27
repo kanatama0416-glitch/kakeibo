@@ -185,6 +185,23 @@
     }
   }
 
+  async function addLoan(loan) {
+    var borrower = loan.lender === "me" ? "partner" : "me";
+    var result = await client.from("loans").insert({
+      loan_date: loan.date,
+      description: loan.description,
+      amount: loan.amount,
+      lender: loan.lender,
+      borrower: borrower,
+      status: "open",
+      memo: loan.memo || null,
+      is_demo: false
+    }).select("id,loan_date,description,amount,lender,borrower,status,memo").single();
+
+    if (result.error) throw result.error;
+    return result.data;
+  }
+
   async function addManualTransaction(tx) {
     var categoryResult = await client.from("categories")
       .select("id").eq("name", tx.category_name).limit(1);
@@ -332,6 +349,7 @@
     checkAccess: checkAccess,
     getInitialData: getInitialData,
     classifyTransaction: classifyTransaction,
+    addLoan: addLoan,
     addManualTransaction: addManualTransaction,
     addInitialExpense: addInitialExpense,
     saveCarryover: saveCarryover,
