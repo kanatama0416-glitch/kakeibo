@@ -165,7 +165,7 @@
 
     for (var i = 0; i < Math.min(rows.length, 12); i += 1) {
       var headers = rows[i];
-      var dateIndex = csvColumnIndex(headers, dateNames, ["利用日","取引日","売上日","年月日"]);
+      var dateIndex = csvColumnIndex(headers, dateNames, ["利用日","利用年月日","取引日","売上日","年月日"]);
       var merchantIndex = csvColumnIndex(headers, merchantNames, ["利用先","利用店","加盟店","店名","摘要","内容"]);
       var amountIndex = csvColumnIndex(headers, amountNames, ["利用金額","利用額","請求金額","金額"]);
 
@@ -185,26 +185,23 @@
     var raw = normalizeText(value);
     if (!raw) return null;
 
-    raw = raw.replace(/[年月]/g, "/").replace(/日/g, "");
-    raw = raw.replace(/[.]/g, "/").replace(/-/g, "/");
-    var parts = raw.split("/").filter(Boolean);
-
     var year;
     var month;
     var day;
+    var full = raw.match(/(\d{4})\D{0,3}(\d{1,2})\D{0,3}(\d{1,2})/);
+    var short = raw.match(/^(\d{1,2})\D{1,3}(\d{1,2})(?:\D|$)/);
 
-    if (parts.length >= 3) {
-      year = Number(parts[0]);
-      month = Number(parts[1]);
-      day = Number(parts[2]);
-      if (year < 100) year += 2000;
-    } else if (parts.length === 2) {
+    if (full) {
+      year = Number(full[1]);
+      month = Number(full[2]);
+      day = Number(full[3]);
+    } else if (short) {
       year = Number(state.currentMonth.split("-")[0]);
-      month = Number(parts[0]);
-      day = Number(parts[1]);
+      month = Number(short[1]);
+      day = Number(short[2]);
     } else {
       var digits = raw.replace(/\D/g, "");
-      if (digits.length === 8) {
+      if (digits.length >= 8) {
         year = Number(digits.slice(0,4));
         month = Number(digits.slice(4,6));
         day = Number(digits.slice(6,8));
@@ -226,7 +223,7 @@
   function parseCsvAmount(value) {
     var raw = normalizeText(value);
     if (!raw) return null;
-    var negative = /^-/.test(raw) || /^\(.*\)$/.test(raw);
+    var negative = /^-/.test(raw) || /^[▲△]/.test(raw) || /^\(.*\)$/.test(raw);
     var digits = raw.replace(/[^0-9]/g, "");
     if (!digits) return null;
     var amount = Number(digits);
