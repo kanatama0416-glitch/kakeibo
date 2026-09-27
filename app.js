@@ -99,6 +99,187 @@
     });
   }
 
+  function auditActorLabel(log) {
+    var email = String((log && log.actor_email) || "").toLowerCase();
+    if (email === "kanatama0416@gmail.com") return "にゃち";
+    if (email === "ryu.uver.111@gmail.com") return "うー";
+    return email || "システム";
+  }
+
+  function auditActionLabel(action) {
+    return action === "INSERT" ? "追加" : action === "DELETE" ? "削除" : "変更";
+  }
+
+  function auditTableLabel(tableName) {
+    var labels = {
+      transactions:"支出明細",
+      categories:"費目",
+      merchant_rules:"店舗ルール",
+      loans:"貸し借り",
+      repayment_plans:"返済計画",
+      repayments:"返済記録",
+      initial_expenses:"立替金",
+      monthly_carryovers:"翌月への繰越",
+      app_settings:"共同費の基本負担",
+      monthly_settlements:"支払い済み記録",
+      monthly_repayment_amounts:"月ごとの返済額"
+    };
+    return labels[tableName] || tableName || "データ";
+  }
+
+  function auditFieldLabel(field) {
+    var labels = {
+      transaction_date:"日付",
+      expense_date:"日付",
+      repayment_date:"返済日",
+      repayment_month:"返済月",
+      settlement_month:"精算月",
+      from_month:"繰越元の月",
+      to_month:"繰越先の月",
+      merchant_name:"利用先",
+      item_name:"項目名",
+      description:"内容",
+      title:"名称",
+      amount:"金額",
+      original_amount:"元の金額",
+      remaining_amount:"残額",
+      monthly_amount:"毎月の返済額",
+      me_share_percent:"にゃちの負担割合",
+      category_id:"費目",
+      category:"区分",
+      scope:"支出区分",
+      payer:"支払った人",
+      lender:"立て替えた人",
+      borrower:"返す人",
+      status:"状態",
+      mode:"処理",
+      memo:"メモ",
+      paid_at:"支払日時",
+      source:"取込元",
+      card_provider:"カード会社",
+      card_label:"カード名"
+    };
+    return labels[field] || field;
+  }
+
+  function auditPersonValue(value) {
+    return value === "me" ? "にゃち" : value === "partner" ? "うー" : value;
+  }
+
+  function auditValueLabel(field, value) {
+    if (value == null || value === "") return "なし";
+    if (["amount","original_amount","remaining_amount","monthly_amount"].indexOf(field) !== -1) {
+      return yen(value);
+    }
+    if (field === "me_share_percent") return String(value) + "%";
+    if (["payer","lender","borrower"].indexOf(field) !== -1) return auditPersonValue(value);
+    if (field === "scope") return scopeLabel(value);
+    if (field === "status") {
+      return value === "confirmed" ? "確定" : value === "unclassified" ? "未分類" : value === "refunded" ? "返金" : String(value);
+    }
+    if (field === "mode") return value === "auto" ? "自動分類" : value === "confirm" ? "毎回確認" : String(value);
+    if (typeof value === "boolean") return value ? "はい" : "いいえ";
+    return String(value);
+  }
+
+  function auditRecordLabel(log) {
+    var row = log.action === "DELETE" ? (log.before_data || {}) : (log.after_data || log.before_data || {});
+    if (log.table_name === "transactions") {
+      return (row.merchant_name || "支出") + (row.amount != null ? " " + yen(row.amount) : "");
+    }
+    if (log.table_name === "initial_expenses") {
+      return (row.item_name || "立替金") + (row.amount != null ? " " + yen(row.amount) : "");
+    }
+    if (log.table_name === "categories") return row.name || "費目";
+    if (log.table_name === "merchant_rules") return row.merchant_name || "店舗ルール";
+    if (log.table_name === "repayment_plans") return row.title || "返済計画";
+    if (log.table_name === "monthly_repayment_amounts") {
+      return (row.repayment_month ? fullMonthLabel(String(row.repayment_month).slice(0,7)) : "月ごと") + "の返済額";
+    }
+    if (log.table_name === "monthly_carryovers") {
+      return (row.from_month ? fullMonthLabel(String(row.from_month).slice(0,7)) : "") + "の繰越";
+    }
+    if (log.table_name === "monthly_settlements") {
+      return (row.settlement_month ? fullMonthLabel(String(row.settlement_month).slice(0,7)) : "") + "の支払い";
+    }
+    if (log.table_name === "repayments") {
+      return (row.repayment_month ? fullMonthLabel(String(row.repayment_month).slice(0,7)) : "") + "の返済";
+    }
+    if (log.table_name === "app_settings") return "共同費の基本負担";
+    if (log.table_name === "loans") return row.description || "貸し借り";
+    return "ID " + (log.record_id || "-");
+  }
+
+  function auditChangedDetail(log) {
+    if (log.action !== "UPDATE") return "";
+    var ignored = { id:true, created_at:true, updated_at:true };
+    var before = log.before_data || {};
+    var after = log.after_data || {};
+    var fields = (log.changed_fields || []).filter(function (field) {
+      return !ignored[field];
+    });
+    if (!fields.length) return "内部データを更新";
+    return fields.slice(0, 6).map(function (field) {
+      return auditFieldLabel(field) + "：" +
+        auditValueLabel(field, before[field]) + " → " +
+        auditValueLabel(field, after[field]);
+    }).join(" / ") + (fields.length > 6 ? " ほか" : "");
+  }
+
+  function auditTimeLabel(value) {
+    if (!value) return "";
+    var date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return String(value);
+    return date.toLocaleString("ja-JP", {
+      timeZone:"Asia/Tokyo",
+      year:"numeric",
+      month:"numeric",
+      day:"numeric",
+      hour:"2-digit",
+      minute:"2-digit",
+      second:"2-digit"
+    });
+  }
+
+  function renderAuditHistory(logs) {
+    var list = document.getElementById("auditHistoryList");
+    if (!list) return;
+    if (!logs || !logs.length) {
+      list.innerHTML = '<p class="audit-empty">まだ変更履歴はありません。</p>';
+      return;
+    }
+
+    list.innerHTML = logs.map(function (log) {
+      var action = auditActionLabel(log.action);
+      var actionClass = log.action === "INSERT" ? "add" : log.action === "DELETE" ? "delete" : "update";
+      var details = auditChangedDetail(log);
+      return '<article class="audit-history-row">' +
+        '<div class="audit-history-head">' +
+          '<div><span class="audit-action ' + actionClass + '">' + escapeHtml(action) + '</span>' +
+          '<strong>' + escapeHtml(auditTableLabel(log.table_name)) + '</strong></div>' +
+          '<time>' + escapeHtml(auditTimeLabel(log.changed_at)) + '</time>' +
+        '</div>' +
+        '<p class="audit-history-actor">' + escapeHtml(auditActorLabel(log)) + ' が操作</p>' +
+        '<p class="audit-history-target">' + escapeHtml(auditRecordLabel(log)) + '</p>' +
+        (details ? '<p class="audit-history-detail">' + escapeHtml(details) + '</p>' : '') +
+      '</article>';
+    }).join("");
+  }
+
+  async function openAuditHistory() {
+    var dialog = document.getElementById("auditHistoryDialog");
+    var list = document.getElementById("auditHistoryList");
+    if (!dialog || !list) return;
+    list.innerHTML = '<p class="audit-empty">履歴を読み込んでいます…</p>';
+    dialog.showModal();
+    try {
+      renderAuditHistory(await window.kakeiboDb.getAuditLogs(300));
+    } catch (error) {
+      console.error(error);
+      list.innerHTML = '<p class="audit-empty audit-error">変更履歴を読み込めませんでした。</p>';
+    }
+  }
+
   function normalizeText(value) {
     var text = String(value == null ? "" : value);
     try { text = text.normalize("NFKC"); } catch (e) {}
@@ -2177,6 +2358,7 @@
   });
   document.getElementById("merchantSettingsButton").addEventListener("click", openMerchantRuleAdd);
   document.getElementById("addMerchantRuleButton").addEventListener("click", openMerchantRuleAdd);
+  document.getElementById("auditHistoryButton").addEventListener("click", openAuditHistory);
 
   document.getElementById("meSharePercent").addEventListener("input", function (event) {
     updateSharePreview(event.target.value);
