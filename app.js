@@ -1583,6 +1583,14 @@
 
   document.querySelectorAll("[data-go]").forEach(function (button) {
     button.addEventListener("click", function () {
+      if (button.classList.contains("nav-item")) {
+        button.classList.remove("nav-bounce");
+        void button.offsetWidth;
+        button.classList.add("nav-bounce");
+        window.setTimeout(function () {
+          button.classList.remove("nav-bounce");
+        }, 360);
+      }
       go(button.getAttribute("data-go"));
     });
   });
