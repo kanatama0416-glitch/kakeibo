@@ -522,46 +522,78 @@
 
   function parseRakutenPdfPages(pages) {
     var parsedRows = [];
-    var datePattern = /^20\d{2}[\/\.\-]\d{1,2}[\/\.\-]\d{1,2}$/;
+    var dateLines = 0;
+    var amountLines = 0;
+    var flexibleDate = /(20\d{2})\s*[\/\.\-]\s*(\d{1,2})\s*[\/\.\-]\s*(\d{1,2})/;
 
     (pages || []).forEach(function (page) {
-      var items = page.items || [];
-      var dateItems = items.filter(function (item) {
-        return Number(item.x || 0) < 90 &&
-          datePattern.test(normalizeText(item.text));
+      var items = (page.items || []).slice().sort(function (a, b) {
+        if (Math.abs(Number(a.y || 0) - Number(b.y || 0)) > 8) {
+          return Number(b.y || 0) - Number(a.y || 0);
+        }
+        return Number(a.x || 0) - Number(b.x || 0);
       });
 
-      dateItems.forEach(function (dateItem) {
-        var line = items.filter(function (item) {
-          return Math.abs(Number(item.y || 0) - Number(dateItem.y || 0)) <= 8;
-        }).sort(function (a, b) {
+      var lines = [];
+      items.forEach(function (item) {
+        var target = null;
+        for (var i = lines.length - 1; i >= 0; i -= 1) {
+          if (Math.abs(Number(lines[i].y || 0) - Number(item.y || 0)) <= 8) {
+            target = lines[i];
+            break;
+          }
+          if (Number(lines[i].y || 0) - Number(item.y || 0) > 14) break;
+        }
+        if (!target) {
+          target = { y:Number(item.y || 0), items:[] };
+          lines.push(target);
+        }
+        target.items.push(item);
+      });
+
+      lines.forEach(function (line) {
+        line.items.sort(function (a, b) {
           return Number(a.x || 0) - Number(b.x || 0);
         });
 
-        var amountItems = line.filter(function (item) {
-          return Number(item.x || 0) > 260;
-        }).map(function (item) {
-          return {
-            x:Number(item.x || 0),
-            amount:parsePdfAmountToken(item.text)
-          };
-        }).filter(function (item) {
-          return item.amount != null;
-        }).sort(function (a, b) {
-          return a.x - b.x;
+        var lineText = normalizeText(line.items.map(function (item) {
+          return item.text;
+        }).join(" "));
+        var dateMatch = lineText.match(flexibleDate);
+        if (!dateMatch) return;
+
+        dateLines += 1;
+
+        var amountColumnItems = line.items.filter(function (item) {
+          var x = Number(item.x || 0);
+          return x >= 270 && x <= 350;
         });
 
-        if (!amountItems.length) return;
+        var amount = null;
+        for (var i = 0; i < amountColumnItems.length; i += 1) {
+          amount = parsePdfAmountToken(amountColumnItems[i].text);
+          if (amount) break;
+        }
 
-        var firstAmount = amountItems[0];
-        var merchantParts = line.filter(function (item) {
+        if (!amount && amountColumnItems.length) {
+          var combinedAmount = normalizeText(amountColumnItems.map(function (item) {
+            return item.text;
+          }).join(""));
+          if (!/[\/\.\-]/.test(combinedAmount)) {
+            amount = parsePdfAmountToken(combinedAmount);
+          }
+        }
+
+        if (!amount) return;
+        amountLines += 1;
+
+        var merchantParts = line.items.filter(function (item) {
           var x = Number(item.x || 0);
-          return x > Number(dateItem.x || 0) && x < firstAmount.x;
+          return x >= 60 && x < 270;
         }).map(function (item) {
           return normalizeText(item.text);
         }).filter(function (text) {
           if (!text) return false;
-          if (datePattern.test(text)) return false;
           if (/^(?:本人|家族)\*?$/.test(text)) return false;
           if (text === "*") return false;
           if (/^(?:1回払い|一括払い|分割払い|リボ払い|ボーナス払い|回払い)$/.test(text)) return false;
@@ -577,19 +609,26 @@
           .replace(/\s{2,}/g, " ")
           .trim();
 
-        var date = parseCsvDate(dateItem.text);
-        if (!date || !merchant || merchant.length < 2 || !firstAmount.amount) return;
+        var date = parseCsvDate(
+          dateMatch[1] + "/" + dateMatch[2] + "/" + dateMatch[3]
+        );
+
+        if (!date || !merchant || merchant.length < 2) return;
 
         parsedRows.push({
           date:date,
           merchant_name:merchant,
-          merchant_raw:line.map(function (item) { return item.text; }).join(" "),
-          amount:firstAmount.amount
+          merchant_raw:lineText,
+          amount:amount
         });
       });
     });
 
-    return parsedRows;
+    return {
+      rows:parsedRows,
+      dateLines:dateLines,
+      amountLines:amountLines
+    };
   }
 
   function parseRakutenPdfText(text) {
@@ -772,7 +811,8 @@
     var ignored = 0;
     var seen = {};
 
-    var rakutenPageRows = parseRakutenPdfPages(extracted.pages);
+    var rakutenPageResult = parseRakutenPdfPages(extracted.pages);
+    var rakutenPageRows = rakutenPageResult.rows;
     var rakutenTextRows = rakutenPageRows.length
       ? rakutenPageRows
       : parseRakutenPdfText(extracted.text);
@@ -875,7 +915,11 @@
       }
 
       if (!result.length) {
-        throw new Error("PDFの文字読み取りはできましたが、利用日・利用先・金額を明細として判定できませんでした。");
+        throw new Error(
+          "PDFの文字読み取りはできましたが、明細を判定できませんでした。" +
+          "（日付候補 " + rakutenPageResult.dateLines +
+          "件 / 金額行 " + rakutenPageResult.amountLines + "件）"
+        );
       }
     }
 
