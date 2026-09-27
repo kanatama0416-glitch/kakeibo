@@ -57,12 +57,169 @@
   }
 
   function txRow(tx) {
-    var sub = shortDate(tx.date) + " ・ " + (tx.category_name || "未分類") + " ・ " + scopeLabel(tx.scope);
+    var sub = shortDate(tx.date) + " ・ " + (tx.category_name || "その他") + " ・ " + scopeLabel(tx.scope);
     return '<button type="button" class="transaction-row transaction-edit-row" data-edit-tx="' + tx.id + '">' +
       '<div class="tx-icon">' + iconFor(tx) + '</div>' +
       '<div class="tx-main"><strong>' + escapeHtml(tx.merchant_name) + '</strong><small>' + sub + '</small></div>' +
       '<div class="tx-side"><div class="tx-amount">' + yen(tx.amount) + '</div>' +
       '<span class="tx-edit-label">編集 ›</span></div></button>';
+  }
+
+  var CATEGORY_COLORS = [
+    "#1f7a5a",
+    "#4f8fa8",
+    "#d09a45",
+    "#9b78b4",
+    "#d27575",
+    "#6f9b70",
+    "#7b838d"
+  ];
+
+  function normalizedCategory(tx) {
+    return tx.category_name || "その他";
+  }
+
+  function confirmedSpending(transactions) {
+    return transactions.filter(function (t) {
+      return t.status === "confirmed";
+    });
+  }
+
+  function categoryTotals(transactions) {
+    var totals = {};
+    confirmedSpending(transactions).forEach(function (tx) {
+      var category = normalizedCategory(tx);
+      totals[category] = (totals[category] || 0) + Number(tx.amount || 0);
+    });
+    return totals;
+  }
+
+  function sortedCategoryEntries(totals) {
+    return Object.keys(totals).map(function (name) {
+      return { name:name, amount:totals[name] };
+    }).sort(function (a,b) {
+      return b.amount - a.amount;
+    });
+  }
+
+  function categoryColorMap(categories) {
+    var map = {};
+    categories.forEach(function (name, index) {
+      map[name] = CATEGORY_COLORS[index % CATEGORY_COLORS.length];
+    });
+    return map;
+  }
+
+  function analysisMonths() {
+    var months = [];
+    var cursor = state.currentMonth;
+    for (var i = 0; i < 6; i += 1) {
+      if (cursor < OPERATION_START_MONTH) break;
+      months.unshift(cursor);
+      cursor = addMonths(cursor, -1);
+    }
+    return months;
+  }
+
+  function renderHomeCategoryChart(summary) {
+    var entries = sortedCategoryEntries(categoryTotals(summary.monthTransactions));
+    var container = document.getElementById("homeCategoryBars");
+    var empty = document.getElementById("homeCategoryEmpty");
+    var title = document.getElementById("usageTitle");
+
+    title.textContent = monthLabel(state.currentMonth) + "の使い道";
+
+    if (!entries.length) {
+      container.innerHTML = "";
+      empty.classList.remove("hidden");
+      return;
+    }
+
+    empty.classList.add("hidden");
+    var maxAmount = entries[0].amount || 1;
+    var colors = categoryColorMap(entries.map(function (x) { return x.name; }));
+    container.innerHTML = entries.slice(0, 6).map(function (entry) {
+      var width = Math.max(4, Math.round(entry.amount / maxAmount * 100));
+      return '<div class="category-bar-row">' +
+        '<div class="category-bar-head"><span>' + escapeHtml(entry.name) + '</span><strong>' +
+        yen(entry.amount) + '</strong></div>' +
+        '<div class="category-bar-track"><span style="width:' + width + '%;background:' +
+        colors[entry.name] + '"></span></div></div>';
+    }).join("");
+  }
+
+  function renderAnalysisChart() {
+    var months = analysisMonths();
+    var rows = months.map(function (month) {
+      var txs = state.data.transactions.filter(function (t) {
+        return monthKeyFromDate(t.date) === month;
+      });
+      return { month:month, totals:categoryTotals(txs) };
+    });
+
+    var categorySet = {};
+    rows.forEach(function (row) {
+      Object.keys(row.totals).forEach(function (name) {
+        categorySet[name] = true;
+      });
+    });
+
+    var categories = Object.keys(categorySet).sort(function (a,b) {
+      var totalA = rows.reduce(function (sum,row) { return sum + Number(row.totals[a] || 0); }, 0);
+      var totalB = rows.reduce(function (sum,row) { return sum + Number(row.totals[b] || 0); }, 0);
+      return totalB - totalA;
+    });
+
+    var colorMap = categoryColorMap(categories);
+    var totalsByMonth = rows.map(function (row) {
+      return Object.keys(row.totals).reduce(function (sum,key) {
+        return sum + Number(row.totals[key] || 0);
+      }, 0);
+    });
+    var maxTotal = Math.max.apply(null, totalsByMonth.concat([1]));
+    var rangeTotal = totalsByMonth.reduce(function (sum,x) { return sum + x; }, 0);
+
+    document.getElementById("analysisRangeLabel").textContent =
+      months.length > 1
+        ? months[0].replace("-", "年") + "月〜" + monthLabel(months[months.length - 1])
+        : (months[0] ? months[0].replace("-", "年") + "月" : "");
+    document.getElementById("analysisRangeTotal").textContent = yen(rangeTotal);
+
+    var chart = document.getElementById("monthlyStackedChart");
+    var empty = document.getElementById("monthlyStackedEmpty");
+    var legend = document.getElementById("analysisLegend");
+
+    if (!categories.length) {
+      chart.innerHTML = "";
+      legend.innerHTML = "";
+      empty.classList.remove("hidden");
+      return;
+    }
+
+    empty.classList.add("hidden");
+
+    chart.innerHTML = rows.map(function (row, index) {
+      var monthTotal = totalsByMonth[index];
+      var height = monthTotal ? Math.max(8, Math.round(monthTotal / maxTotal * 100)) : 0;
+      var segments = categories.map(function (category) {
+        var amount = Number(row.totals[category] || 0);
+        if (!amount || !monthTotal) return "";
+        var segmentHeight = amount / monthTotal * 100;
+        return '<span class="stack-segment" title="' + escapeHtml(category) + ' ' + yen(amount) +
+          '" style="height:' + segmentHeight + '%;background:' + colorMap[category] + '"></span>';
+      }).join("");
+
+      return '<div class="stack-month">' +
+        '<div class="stack-total">' + (monthTotal ? yen(monthTotal) : "¥0") + '</div>' +
+        '<div class="stack-column-wrap"><div class="stack-column" style="height:' + height + '%">' +
+        segments + '</div></div>' +
+        '<div class="stack-month-label">' + monthLabel(row.month) + '</div></div>';
+    }).join("");
+
+    legend.innerHTML = categories.map(function (category) {
+      return '<span><i style="background:' + colorMap[category] + '"></i>' +
+        escapeHtml(category) + '</span>';
+    }).join("");
   }
 
   function carryInAmount(category) {
@@ -166,12 +323,6 @@
     document.getElementById("debtProgress").style.width =
       Math.max(0, Math.min(100, progress)) + "%";
 
-    var unknown = summary.monthTransactions.filter(function (t) {
-      return t.status === "unclassified" || !t.category_name;
-    });
-    document.getElementById("unknownCountText").textContent =
-      "未分類が" + unknown.length + "件あります";
-
     var recent = summary.monthTransactions.slice()
       .sort(function (a,b) { return b.date.localeCompare(a.date); }).slice(0,5);
     document.getElementById("recentTransactions").innerHTML = recent.map(txRow).join("");
@@ -182,15 +333,6 @@
       filtered = filtered.filter(function (t) { return t.scope === state.filter; });
     }
     document.getElementById("allTransactions").innerHTML = filtered.map(txRow).join("");
-
-    document.getElementById("unknownTransactions").innerHTML = unknown.map(function (tx) {
-      return '<article class="unknown-card"><div class="unknown-top"><div><strong>' +
-        escapeHtml(tx.merchant_name) + '</strong><small>' + shortDate(tx.date) + " ・ " +
-        yen(tx.amount) + '</small></div><span class="tag">未分類</span></div>' +
-        '<div class="unknown-actions"><button class="classify" data-classify="' + tx.id +
-        '">分類する</button><button class="personal" data-personal="' + tx.id +
-        '">個人支出</button></div></article>';
-    }).join("");
 
     document.getElementById("loanBalance").textContent =
       (summary.loanNet >= 0 ? "うー → にゃち " : "にゃち → うー ") +
@@ -284,6 +426,9 @@
     document.getElementById("settlementDirection").textContent =
       directionText(summary.finalSettlement);
 
+    renderHomeCategoryChart(summary);
+    renderAnalysisChart();
+
     document.getElementById("breakdownList").innerHTML =
       '<div class="breakdown-row"><span>生活費の差額<small>' +
       directionText(summary.livingSettlement).replace("へ支払い","") +
@@ -367,25 +512,6 @@
       };
     });
 
-    document.querySelectorAll("[data-personal]").forEach(function (button) {
-      button.onclick = async function () {
-        var id = Number(button.getAttribute("data-personal"));
-        var tx = state.data.transactions.find(function (x) {
-          return Number(x.id) === id;
-        });
-        if (!tx) return;
-
-        var category = tx.category_name || "その他";
-        try {
-          await window.kakeiboDb.classifyTransaction(id, category, "mine", false);
-          state.data = await window.kakeiboDb.getInitialData();
-          render();
-        } catch (e) {
-          console.error(e);
-          alert("個人支出への変更を保存できませんでした。");
-        }
-      };
-    });
   }
 
   function initMonthSelect() {
