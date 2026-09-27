@@ -120,10 +120,13 @@
       client.from("monthly_settlements")
         .select("id,settlement_month,amount,paid_at,created_at,updated_at")
         .order("settlement_month", { ascending: true }),
+      client.from("monthly_repayment_amounts")
+        .select("id,repayment_plan_id,repayment_month,amount,updated_at")
+        .order("repayment_month", { ascending: true }),
       client.from("repayments")
-        .select("id,repayment_plan_id,repayment_date,amount,is_demo,created_at")
+        .select("id,repayment_plan_id,repayment_date,repayment_month,amount,is_demo,created_at")
         .eq("is_demo", false)
-        .order("repayment_date", { ascending: true })
+        .order("repayment_month", { ascending: true })
     ]);
 
     results.forEach(function (r) {
@@ -204,11 +207,21 @@
           updated_at:x.updated_at
         };
       }),
-      repayments: (results[9].data || []).map(function (x) {
+      repayment_amounts: (results[9].data || []).map(function (x) {
         return {
           id:x.id,
-          repayment_plan_id:x.repayment_plan_id,
+          repayment_plan_id:Number(x.repayment_plan_id),
+          repayment_month:x.repayment_month,
+          amount:Number(x.amount || 0),
+          updated_at:x.updated_at
+        };
+      }),
+      repayments: (results[10].data || []).map(function (x) {
+        return {
+          id:x.id,
+          repayment_plan_id:Number(x.repayment_plan_id),
           repayment_date:x.repayment_date,
+          repayment_month:x.repayment_month,
           amount:Number(x.amount || 0),
           created_at:x.created_at
         };
@@ -587,25 +600,37 @@
     if (result.error) throw result.error;
   }
 
-  async function updateRepaymentAmount(planId, amount) {
-    var result = await client.from("repayment_plans")
-      .update({ monthly_amount: amount })
-      .eq("id", planId)
-      .eq("is_demo", false);
+  async function saveMonthlyRepaymentAmount(planId, repaymentMonth, amount) {
+    var value = Number(amount);
+    if (!Number.isFinite(value) || value < 0) {
+      throw new Error("返済額は0円以上で指定してください。");
+    }
+
+    var result = await client.from("monthly_repayment_amounts")
+      .upsert({
+        repayment_plan_id:Number(planId),
+        repayment_month:repaymentMonth + "-01",
+        amount:Math.round(value),
+        updated_at:new Date().toISOString()
+      }, { onConflict:"repayment_plan_id,repayment_month" })
+      .select("id,repayment_plan_id,repayment_month,amount,updated_at")
+      .single();
     if (result.error) throw result.error;
+    return result.data;
   }
 
-  async function savePaidSettlement(settlementMonth, amount, repaymentAmount) {
-    var result = await client.rpc("save_monthly_settlement_with_repayment", {
+  async function markSettlementPaid(settlementMonth, amount, planId, repaymentAmount) {
+    var result = await client.rpc("kakeibo_mark_settlement_paid", {
       p_settlement_month:settlementMonth + "-01",
-      p_amount:Number(amount || 0),
-      p_repayment_amount:Number(repaymentAmount || 0)
+      p_settlement_amount:Math.round(Number(amount || 0)),
+      p_plan_id:planId ? Number(planId) : null,
+      p_repayment_amount:Math.round(Number(repaymentAmount || 0))
     });
     if (result.error) throw result.error;
   }
 
-  async function deletePaidSettlement(settlementMonth) {
-    var result = await client.rpc("delete_monthly_settlement_with_repayment", {
+  async function undoSettlementPaid(settlementMonth) {
+    var result = await client.rpc("kakeibo_undo_settlement_paid", {
       p_settlement_month:settlementMonth + "-01"
     });
     if (result.error) throw result.error;
@@ -639,8 +664,8 @@
     deleteCategory: deleteCategory,
     saveMerchantRule: saveMerchantRule,
     deleteMerchantRule: deleteMerchantRule,
-    updateRepaymentAmount: updateRepaymentAmount,
-    savePaidSettlement: savePaidSettlement,
-    deletePaidSettlement: deletePaidSettlement
+    saveMonthlyRepaymentAmount: saveMonthlyRepaymentAmount,
+    markSettlementPaid: markSettlementPaid,
+    undoSettlementPaid: undoSettlementPaid
   };
 })();
