@@ -251,7 +251,7 @@
       </section>
     </main>
 
-    <button class="fab" type="button" data-open="addDialog" aria-label="追加">＋</button>
+    <button class="fab" type="button" data-open="manualExpenseDialog" aria-label="支出を追加">＋</button>
 
     <nav class="bottom-nav">
       <button class="nav-item active" data-go="home"><span>⌂</span><small>ホーム</small></button>
@@ -402,17 +402,6 @@
       <div class="dialog-head"><h3>今月の返済額</h3><button type="button" data-close-dialog>×</button></div>
       <label>返済額<input id="repaymentInput" type="number" min="0" step="1000" value="20000"></label>
       <button class="primary-button" value="save">変更する</button>
-    </form>
-  </dialog>
-
-  <dialog id="addDialog">
-    <form method="dialog" class="dialog-card">
-      <div class="dialog-head"><h3>追加する</h3><button type="button" data-close-dialog>×</button></div>
-      <div class="add-grid add-grid-two">
-        <button type="button" data-switch-dialog="manualExpenseDialog">支出</button>
-        <button type="button" data-switch-dialog="loanDialog">立替</button>
-      </div>
-      <p class="muted">日常の入力は支出と立替だけ。返済・立替金は「貸借・返済」から管理できます。</p>
     </form>
   </dialog>
 
