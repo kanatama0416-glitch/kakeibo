@@ -110,3 +110,10 @@ dialog{width:min(430px,calc(100% - 28px));border:0;border-radius:24px;padding:0;
 .danger-button{width:100%;margin-top:10px;border:1px solid #f0c9c5;border-radius:14px;padding:12px;background:#fff6f5;color:#b5463d;font-weight:900}
 .danger-button:active{background:#fdecea}
 .add-grid-two{grid-template-columns:1fr 1fr}
+
+
+.auth-actions{display:flex;justify-content:center;gap:8px 14px;flex-wrap:wrap;margin-top:11px}
+.auth-link-button{border:0;background:transparent;color:var(--green);font-size:11px;font-weight:900;padding:4px 2px;text-decoration:underline;text-underline-offset:2px}
+.auth-link-button:disabled{opacity:.5}
+.auth-mode-title{margin:0 0 13px;font-size:14px;font-weight:900;color:var(--text)}
+.auth-back-button{margin-top:10px}
