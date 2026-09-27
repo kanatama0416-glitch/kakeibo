@@ -369,6 +369,131 @@
     };
   }
 
+  async function loadPdfDocument(buffer) {
+    if (!window.pdfjsLib) {
+      throw new Error("PDF読み込み機能を起動できませんでした。");
+    }
+
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl();
+    var loadingTask = window.pdfjsLib.getDocument({
+      data:new Uint8Array(buffer)
+    });
+
+    try {
+      return await loadingTask.promise;
+    } catch (error) {
+      if (error && (error.name === "PasswordException" || /password/i.test(error.message || ""))) {
+        throw new Error("パスワード付きPDFはそのまま読み込めません。パスワード保護を解除したPDFを使ってください。");
+      }
+      throw error;
+    }
+  }
+
+  function ocrCandidateRows(lines, pageNumber) {
+    var normalizedLines = (lines || []).map(function (line) {
+      return normalizeText(line && line.text != null ? line.text : line);
+    }).filter(Boolean);
+
+    var rows = [];
+    normalizedLines.forEach(function (line, index) {
+      if (!pdfDateMatch(line)) return;
+
+      var variants = [line];
+      if (index + 1 < normalizedLines.length) variants.push(line + " " + normalizedLines[index + 1]);
+      if (index + 2 < normalizedLines.length) variants.push(line + " " + normalizedLines[index + 1] + " " + normalizedLines[index + 2]);
+
+      variants.forEach(function (text) {
+        rows.push({
+          page:pageNumber,
+          items:[{ text:text, x:0, y:0 }],
+          text:text
+        });
+      });
+    });
+
+    if (!rows.length) {
+      normalizedLines.forEach(function (line) {
+        rows.push({
+          page:pageNumber,
+          items:[{ text:line, x:0, y:0 }],
+          text:line
+        });
+      });
+    }
+
+    return rows;
+  }
+
+  async function extractPdfRowsWithOcr(buffer, onProgress) {
+    if (!window.Tesseract) {
+      throw new Error("画像PDFの文字読み取り機能を起動できませんでした。");
+    }
+
+    var pdf = await loadPdfDocument(buffer);
+    var rows = [];
+    var fullText = [];
+    var worker = null;
+
+    try {
+      if (window.Tesseract.createWorker) {
+        worker = await window.Tesseract.createWorker("jpn+eng", 1, {
+          logger:function (status) {
+            if (!onProgress || !status) return;
+            if (status.status === "recognizing text" && typeof status.progress === "number") {
+              onProgress("画像PDFを読み取り中… " + Math.round(status.progress * 100) + "%");
+            }
+          }
+        });
+      }
+
+      for (var pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+        if (onProgress) onProgress("画像PDFを読み取り中… " + pageNumber + "/" + pdf.numPages + "ページ");
+
+        var page = await pdf.getPage(pageNumber);
+        var viewport = page.getViewport({ scale:1.6 });
+        var canvas = document.createElement("canvas");
+        canvas.width = Math.ceil(viewport.width);
+        canvas.height = Math.ceil(viewport.height);
+        var context = canvas.getContext("2d", { alpha:false });
+        context.fillStyle = "#ffffff";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+
+        await page.render({
+          canvasContext:context,
+          viewport:viewport
+        }).promise;
+
+        var recognition;
+        if (worker) {
+          recognition = await worker.recognize(canvas);
+        } else {
+          recognition = await window.Tesseract.recognize(canvas, "jpn+eng");
+        }
+
+        var text = recognition && recognition.data ? (recognition.data.text || "") : "";
+        fullText.push(text);
+
+        var lines = recognition && recognition.data && recognition.data.lines
+          ? recognition.data.lines
+          : text.split(/\r?\n/).map(function (line) { return { text:line }; });
+
+        rows = rows.concat(ocrCandidateRows(lines, pageNumber));
+
+        canvas.width = 1;
+        canvas.height = 1;
+      }
+    } finally {
+      if (worker && worker.terminate) {
+        await worker.terminate();
+      }
+    }
+
+    return {
+      rows:rows,
+      text:fullText.join("\n")
+    };
+  }
+
   function pdfDateMatch(text) {
     return normalizeText(text).match(/(?:20\d{2}[\/\.\-年]\s*\d{1,2}[\/\.\-月]\s*\d{1,2}日?|\d{1,2}[\/\.\-]\d{1,2})/);
   }
@@ -479,7 +604,7 @@
     };
   }
 
-  async function buildPdfRows(buffer) {
+  async function buildPdfRows(buffer, onProgress) {
     var extracted = await extractPdfRows(buffer);
     var yearMatch = extracted.text.match(/(20\d{2})\s*年/);
     var defaultYear = yearMatch
@@ -528,10 +653,54 @@
     });
 
     if (!result.length) {
-      if (extracted.text.replace(/\s/g, "").length < 30) {
-        throw new Error("このPDFは画像として保存されている可能性があります。文字を選択できるPDFなら読み込めます。");
+      if (onProgress) onProgress("画像PDFとして読み取りを試しています…");
+
+      var ocrExtracted = await extractPdfRowsWithOcr(buffer, onProgress);
+      var ocrYearMatch = ocrExtracted.text.match(/(20\d{2})\s*年/);
+      var ocrDefaultYear = ocrYearMatch
+        ? Number(ocrYearMatch[1])
+        : defaultYear;
+
+      ignored = 0;
+      seen = {};
+
+      ocrExtracted.rows.forEach(function (pdfRow) {
+        var parsed = parsePdfStatementRow(pdfRow, ocrDefaultYear);
+        if (!parsed) {
+          if (pdfDateMatch(pdfRow.text)) ignored += 1;
+          return;
+        }
+
+        var key = parsed.date + "|" + parsed.amount + "|" + normalizeMerchant(parsed.merchant_name);
+        if (seen[key]) return;
+
+        var rule = csvMerchantRule(parsed.merchant_name);
+        var row = {
+          date:parsed.date,
+          merchant_name:parsed.merchant_name,
+          merchant_raw:parsed.merchant_raw,
+          amount:parsed.amount,
+          category_name:rule ? rule.category_name : null,
+          scope:rule ? rule.scope : "shared",
+          selected:true,
+          duplicate:false,
+          matchReason:""
+        };
+
+        var existing = findCsvExistingMatch(row);
+        if (existing) {
+          row.duplicate = true;
+          row.selected = false;
+          row.matchReason = existing.reason;
+        }
+
+        seen[key] = true;
+        result.push(row);
+      });
+
+      if (!result.length) {
+        throw new Error("PDFの文字読み取りはできましたが、利用日・利用先・金額を明細として判定できませんでした。");
       }
-      throw new Error("PDF内の明細を自動判定できませんでした。カード会社の明細レイアウトに合わせた調整が必要です。");
     }
 
     return { rows:result, ignored:ignored };
@@ -1226,7 +1395,9 @@
       var parsed;
 
       if (isPdf) {
-        parsed = await buildPdfRows(buffer);
+        parsed = await buildPdfRows(buffer, function (progressText) {
+          message.textContent = progressText;
+        });
       } else {
         var decoded = decodeCsvBuffer(buffer);
         parsed = buildCsvRows(decoded);
