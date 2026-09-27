@@ -60,7 +60,8 @@
     started: false,
     currentMonth: defaultMonthKey(),
     analysisStartMonth: null,
-    analysisEndMonth: null
+    analysisEndMonth: null,
+    analysisCategory: null
   };
 
   function yen(value) {
@@ -1698,6 +1699,97 @@
     }).join("");
   }
 
+  function renderCategoryTrend(rows, categories, colorMap) {
+    var select = document.getElementById("analysisCategorySelect");
+    var chart = document.getElementById("categoryTrendChart");
+    var empty = document.getElementById("categoryTrendEmpty");
+    var summary = document.getElementById("categoryTrendSummary");
+    if (!select || !chart || !empty || !summary) return;
+
+    if (!categories.length) {
+      select.innerHTML = '<option value="">費目なし</option>';
+      select.disabled = true;
+      chart.innerHTML = "";
+      summary.textContent = "";
+      empty.classList.remove("hidden");
+      return;
+    }
+
+    select.disabled = false;
+    if (!state.analysisCategory || categories.indexOf(state.analysisCategory) === -1) {
+      state.analysisCategory = categories[0];
+    }
+
+    select.innerHTML = categories.map(function (category) {
+      return '<option value="' + escapeHtml(category) + '"' +
+        (category === state.analysisCategory ? ' selected' : '') + '>' +
+        escapeHtml(category) + '</option>';
+    }).join("");
+
+    var amounts = rows.map(function (row) {
+      return Number(row.totals[state.analysisCategory] || 0);
+    });
+    var total = amounts.reduce(function (sum, amount) { return sum + amount; }, 0);
+    summary.textContent = state.analysisCategory + "・期間合計 " + yen(total);
+
+    var width = Math.max(300, rows.length * 96);
+    var height = 184;
+    var left = 34;
+    var right = width - 24;
+    var top = 30;
+    var bottom = 132;
+    var minValue = Math.min.apply(null, amounts.concat([0]));
+    var maxValue = Math.max.apply(null, amounts.concat([0]));
+    if (minValue === maxValue) {
+      maxValue = minValue + 1;
+    }
+
+    function yFor(value) {
+      return top + (maxValue - value) / (maxValue - minValue) * (bottom - top);
+    }
+
+    var step = rows.length > 1 ? (right - left) / (rows.length - 1) : 0;
+    var points = rows.map(function (row, index) {
+      return {
+        month:row.month,
+        amount:amounts[index],
+        x:rows.length === 1 ? (left + right) / 2 : left + step * index,
+        y:yFor(amounts[index])
+      };
+    });
+    var color = colorMap[state.analysisCategory] || CATEGORY_COLORS[0];
+    var zeroY = yFor(0);
+    var polyline = points.map(function (point) {
+      return point.x.toFixed(1) + "," + point.y.toFixed(1);
+    }).join(" ");
+
+    var pointMarkup = points.map(function (point) {
+      var valueY = point.y < 48 ? point.y + 24 : point.y - 12;
+      return '<g>' +
+        '<circle cx="' + point.x + '" cy="' + point.y + '" r="5.5" fill="' + color + '" />' +
+        '<circle cx="' + point.x + '" cy="' + point.y + '" r="9" fill="transparent" stroke="' + color + '" stroke-opacity=".16" stroke-width="7" />' +
+        '<text x="' + point.x + '" y="' + valueY + '" text-anchor="middle" class="trend-value">' +
+          escapeHtml(yen(point.amount)) + '</text>' +
+        '<text x="' + point.x + '" y="164" text-anchor="middle" class="trend-month">' +
+          escapeHtml(monthLabel(point.month)) + '</text>' +
+        '</g>';
+    }).join("");
+
+    chart.style.minWidth = width + "px";
+    chart.innerHTML =
+      '<svg viewBox="0 0 ' + width + ' ' + height + '" width="' + width + '" height="' + height +
+        '" role="img" aria-label="' + escapeHtml(state.analysisCategory) + 'の月別推移">' +
+        '<line x1="' + left + '" y1="' + zeroY + '" x2="' + right + '" y2="' + zeroY +
+          '" class="trend-zero-line" />' +
+        (points.length > 1
+          ? '<polyline points="' + polyline + '" fill="none" stroke="' + color +
+            '" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />'
+          : '') +
+        pointMarkup +
+      '</svg>';
+    empty.classList.add("hidden");
+  }
+
   function renderAnalysisChart() {
     syncAnalysisRangeControls();
     var months = analysisMonths();
@@ -1722,6 +1814,7 @@
     });
 
     var colorMap = categoryColorMap(categories);
+    renderCategoryTrend(rows, categories, colorMap);
     var totalsByMonth = rows.map(function (row) {
       return Object.keys(row.totals).reduce(function (sum,key) {
         return sum + Number(row.totals[key] || 0);
@@ -2802,6 +2895,11 @@
     renderAnalysisChart();
   });
 
+  document.getElementById("analysisCategorySelect").addEventListener("change", function (event) {
+    state.analysisCategory = event.target.value;
+    renderAnalysisChart();
+  });
+
   document.getElementById("payCurrentSettlementButton").addEventListener("click", async function () {
     var sourceMonth = addMonths(state.currentMonth, -1);
     if (sourceMonth < OPERATION_START_MONTH || state.currentMonth > actualMonthKey()) return;
@@ -3222,6 +3320,7 @@
     state.currentMonth = defaultMonthKey();
     state.analysisStartMonth = null;
     state.analysisEndMonth = null;
+    state.analysisCategory = null;
   }
 
   window.KakeiboApp = {
