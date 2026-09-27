@@ -75,7 +75,11 @@
         .select("id,title,original_amount,remaining_amount,monthly_amount,lender,borrower,is_demo")
         .eq("is_demo", false)
         .order("id")
-        .limit(1)
+        .limit(1),
+      client.from("initial_expenses")
+        .select("id,expense_date,item_name,amount,payer,memo,created_at")
+        .order("expense_date", { ascending: false })
+        .order("id", { ascending: false })
     ]);
 
     results.forEach(function (r) {
@@ -120,7 +124,17 @@
           memo:x.memo
         };
       }),
-      repayment_plan: (results[4].data || [])[0] || null
+      repayment_plan: (results[4].data || [])[0] || null,
+      initial_expenses: (results[5].data || []).map(function (x) {
+        return {
+          id:x.id,
+          date:x.expense_date,
+          item_name:x.item_name,
+          amount:x.amount,
+          payer:x.payer,
+          memo:x.memo
+        };
+      })
     };
   }
 
@@ -158,6 +172,21 @@
     }
   }
 
+  async function addInitialExpense(expense) {
+    var result = await client.from("initial_expenses")
+      .insert({
+        expense_date: expense.date,
+        item_name: expense.item_name,
+        amount: expense.amount,
+        payer: expense.payer,
+        memo: expense.memo || null
+      })
+      .select("id,expense_date,item_name,amount,payer,memo")
+      .single();
+    if (result.error) throw result.error;
+    return result.data;
+  }
+
   async function updateRepaymentAmount(planId, amount) {
     var result = await client.from("repayment_plans")
       .update({ monthly_amount: amount })
@@ -175,6 +204,7 @@
     checkAccess: checkAccess,
     getInitialData: getInitialData,
     classifyTransaction: classifyTransaction,
+    addInitialExpense: addInitialExpense,
     updateRepaymentAmount: updateRepaymentAmount
   };
 })();
