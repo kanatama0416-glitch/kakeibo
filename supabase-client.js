@@ -26,12 +26,6 @@
     return result.data.session;
   }
 
-  async function getAccountStatus(email) {
-    var result = await client.rpc("kakeibo_account_status", { p_email: email });
-    if (result.error) throw result.error;
-    return result.data;
-  }
-
   async function signInWithPassword(email, password) {
     var result = await client.auth.signInWithPassword({
       email: email,
@@ -81,9 +75,30 @@
   }
 
   async function checkAccess() {
-    var result = await client.from("categories").select("id").limit(1);
+    var result = await client.from("app_settings").select("id").eq("id", 1).limit(1);
     if (result.error) throw result.error;
     return (result.data || []).length > 0;
+  }
+
+  async function fetchAllTransactions() {
+    var pageSize = 1000;
+    var from = 0;
+    var all = [];
+
+    while (true) {
+      var result = await client.from("transactions")
+        .select("id,transaction_date,merchant_name,merchant_raw,amount,scope,payer,status,source,memo,is_demo,card_provider,card_label,categories(name)")
+        .eq("is_demo", false)
+        .order("transaction_date", { ascending:false })
+        .order("id", { ascending:false })
+        .range(from, from + pageSize - 1);
+      if (result.error) throw result.error;
+      var rows = result.data || [];
+      all = all.concat(rows);
+      if (rows.length < pageSize) break;
+      from += pageSize;
+    }
+    return all;
   }
 
   async function getInitialData() {
@@ -93,10 +108,7 @@
     var results = await Promise.all([
       client.from("categories").select("id,name,icon").order("id"),
       client.from("merchant_rules").select("id,merchant_name,scope,mode,is_demo,categories(name)").order("id"),
-      client.from("transactions")
-        .select("id,transaction_date,merchant_name,merchant_raw,amount,scope,payer,status,source,memo,is_demo,categories(name)")
-        .eq("is_demo", false)
-        .order("transaction_date", { ascending: false }),
+      fetchAllTransactions(),
       client.from("repayment_plans")
         .select("id,title,original_amount,remaining_amount,monthly_amount,lender,borrower,is_demo")
         .eq("is_demo", false)
@@ -104,29 +116,29 @@
         .limit(1),
       client.from("initial_expenses")
         .select("id,expense_date,item_name,amount,payer,memo,created_at")
-        .order("expense_date", { ascending: false })
-        .order("id", { ascending: false }),
+        .order("expense_date", { ascending:false })
+        .order("id", { ascending:false }),
       client.from("monthly_carryovers")
         .select("id,from_month,to_month,category,amount,updated_at")
-        .order("from_month", { ascending: true }),
+        .order("from_month", { ascending:true }),
       client.from("app_settings")
         .select("id,me_share_percent,updated_at")
         .eq("id", 1)
         .limit(1),
       client.from("monthly_settlements")
         .select("id,settlement_month,amount,paid_at,created_at,updated_at")
-        .order("settlement_month", { ascending: true }),
+        .order("settlement_month", { ascending:true }),
       client.from("monthly_repayment_amounts")
         .select("id,repayment_plan_id,repayment_month,amount,updated_at")
-        .order("repayment_month", { ascending: true }),
+        .order("repayment_month", { ascending:true }),
       client.from("repayments")
         .select("id,repayment_plan_id,repayment_date,repayment_month,amount,is_demo,created_at")
         .eq("is_demo", false)
-        .order("repayment_month", { ascending: true })
+        .order("repayment_month", { ascending:true })
     ]);
 
-    results.forEach(function (r) {
-      if (r.error) throw r.error;
+    results.forEach(function (r, index) {
+      if (index !== 2 && r.error) throw r.error;
     });
 
     return {
@@ -140,7 +152,7 @@
           mode:r.mode
         };
       }),
-      transactions: (results[2].data || []).map(function (t) {
+      transactions: (results[2] || []).map(function (t) {
         return {
           id:t.id,
           date:t.transaction_date,
@@ -152,7 +164,9 @@
           payer:t.payer,
           status:t.status,
           source:t.source,
-          memo:t.memo
+          memo:t.memo,
+          card_provider:t.card_provider,
+          card_label:t.card_label
         };
       }),
       repayment_plan: (results[3].data || [])[0] || null,
@@ -176,11 +190,7 @@
           updated_at:x.updated_at
         };
       }),
-      settings: (results[6].data || [])[0] || {
-        id:1,
-        me_share_percent:50,
-        updated_at:null
-      },
+      settings: (results[6].data || [])[0] || { id:1, me_share_percent:50, updated_at:null },
       settlements: (results[7].data || []).map(function (x) {
         return {
           id:x.id,
@@ -213,37 +223,73 @@
     };
   }
 
-  async function classifyTransaction(id, categoryNameValue, scope, payer, rememberMerchant) {
+  function normalizeMerchantKey(value) {
+    return String(value || "").normalize("NFKC").toLowerCase()
+      .replace(/[\s　]/g, "")
+      .replace(/[・･._\-—–ー\/\\（）()［\]\[\]「」『』]/g, "");
+  }
+
+  async function upsertMerchantRuleForTransaction(merchantName, categoryId, scope) {
+    var rulesResult = await client.from("merchant_rules")
+      .select("id,merchant_name")
+      .eq("is_demo", false);
+    if (rulesResult.error) throw rulesResult.error;
+
+    var key = normalizeMerchantKey(merchantName);
+    var existing = (rulesResult.data || []).find(function (row) {
+      return normalizeMerchantKey(row.merchant_name) === key;
+    });
+
+    var payload = {
+      merchant_name:merchantName,
+      category_id:categoryId,
+      scope:scope,
+      mode:"auto",
+      is_demo:false
+    };
+
+    var result = existing
+      ? await client.from("merchant_rules").update(payload).eq("id", existing.id)
+      : await client.from("merchant_rules").insert(payload);
+    if (result.error) throw result.error;
+  }
+
+  async function updateTransaction(id, tx, rememberMerchant) {
     var categoryResult = await client.from("categories")
-      .select("id").eq("name", categoryNameValue).limit(1);
+      .select("id")
+      .eq("name", tx.category_name)
+      .limit(1);
     if (categoryResult.error) throw categoryResult.error;
 
     var categoryId = categoryResult.data[0] ? categoryResult.data[0].id : null;
+    if (!categoryId) throw new Error("費目を選んでください。");
+
+    var amount = Number(tx.amount || 0);
+    if (!Number.isFinite(amount) || amount === 0) {
+      throw new Error("金額は0円以外で指定してください。");
+    }
 
     var updateResult = await client.from("transactions")
-      .update({ category_id: categoryId, scope: scope, payer: payer, status: "confirmed" })
+      .update({
+        transaction_date:tx.date,
+        merchant_name:String(tx.merchant_name || "").trim(),
+        amount:Math.round(amount),
+        category_id:categoryId,
+        scope:tx.scope,
+        payer:tx.payer,
+        status:amount < 0 ? "refunded" : "confirmed",
+        memo:tx.memo || null
+      })
       .eq("id", id)
       .eq("is_demo", false);
     if (updateResult.error) throw updateResult.error;
 
     if (rememberMerchant) {
-      var txResult = await client.from("transactions")
-        .select("merchant_name")
-        .eq("id", id)
-        .eq("is_demo", false)
-        .limit(1);
-      if (txResult.error) throw txResult.error;
-
-      if (txResult.data[0]) {
-        var ruleResult = await client.from("merchant_rules").insert({
-          merchant_name: txResult.data[0].merchant_name,
-          category_id: categoryId,
-          scope: scope,
-          mode: "auto",
-          is_demo: false
-        });
-        if (ruleResult.error) throw ruleResult.error;
-      }
+      await upsertMerchantRuleForTransaction(
+        String(tx.merchant_name || "").trim(),
+        categoryId,
+        tx.scope
+      );
     }
   }
 
@@ -259,19 +305,24 @@
     var categoryResult = await client.from("categories")
       .select("id").eq("name", tx.category_name).limit(1);
     if (categoryResult.error) throw categoryResult.error;
-
     var categoryId = categoryResult.data[0] ? categoryResult.data[0].id : null;
+
+    var amount = Number(tx.amount || 0);
+    if (!Number.isFinite(amount) || amount === 0) {
+      throw new Error("金額は0円以外で指定してください。");
+    }
+
     var result = await client.from("transactions").insert({
-      transaction_date: tx.date,
-      merchant_name: tx.merchant_name,
-      amount: tx.amount,
-      category_id: categoryId,
-      scope: tx.scope,
-      payer: tx.payer,
-      status: "confirmed",
-      source: "manual",
-      memo: tx.memo || null,
-      is_demo: false
+      transaction_date:tx.date,
+      merchant_name:tx.merchant_name,
+      amount:Math.round(amount),
+      category_id:categoryId,
+      scope:tx.scope,
+      payer:tx.payer,
+      status:amount < 0 ? "refunded" : "confirmed",
+      source:"manual",
+      memo:tx.memo || null,
+      is_demo:false
     }).select("id,transaction_date,merchant_name,amount,scope,payer,status,source,memo").single();
 
     if (result.error) throw result.error;
@@ -283,106 +334,39 @@
 
     var categoryResult = await client.from("categories").select("id,name");
     if (categoryResult.error) throw categoryResult.error;
-
     var categoryIds = {};
     (categoryResult.data || []).forEach(function (category) {
       categoryIds[category.name] = category.id;
     });
 
     var payload = rows.map(function (tx) {
+      var amount = Number(tx.amount || 0);
+      var categoryId = tx.category_name ? (categoryIds[tx.category_name] || null) : null;
       return {
-        transaction_date: tx.date,
-        merchant_name: tx.merchant_name,
-        merchant_raw: tx.merchant_raw || tx.merchant_name,
-        amount: Number(tx.amount || 0),
-        category_id: tx.category_name ? (categoryIds[tx.category_name] || null) : null,
-        scope: tx.scope || "shared",
-        payer: tx.payer || "me",
-        status: "confirmed",
-        source: "csv",
-        memo: tx.memo || null,
-        is_demo: false
+        transaction_date:tx.date,
+        merchant_name:tx.merchant_name,
+        merchant_raw:tx.merchant_raw || tx.merchant_name,
+        amount:Math.round(amount),
+        category_id:categoryId,
+        scope:categoryId ? (tx.scope || "shared") : null,
+        payer:tx.payer || "me",
+        status:categoryId ? (amount < 0 ? "refunded" : "confirmed") : "unclassified",
+        source:tx.source === "pdf" ? "pdf" : "csv",
+        memo:tx.memo || null,
+        card_provider:tx.card_provider || null,
+        card_label:tx.card_label || null,
+        is_demo:false
       };
+    }).filter(function (row) {
+      return row.amount !== 0;
     });
 
+    if (!payload.length) return [];
     var result = await client.from("transactions")
       .insert(payload)
-      .select("id,transaction_date,merchant_name,amount,scope,payer,status,source,memo");
+      .select("id,transaction_date,merchant_name,amount,scope,payer,status,source,memo,card_provider,card_label");
     if (result.error) throw result.error;
     return result.data || [];
-  }
-
-  async function syncInitialExpenseRepaymentPlan() {
-    var expenseResult = await client.from("initial_expenses")
-      .select("amount,payer");
-    if (expenseResult.error) throw expenseResult.error;
-
-    var expenses = expenseResult.data || [];
-    var total = expenses.reduce(function (sum, x) {
-      return sum + Number(x.amount || 0);
-    }, 0);
-    var paidByMe = expenses.filter(function (x) {
-      return x.payer === "me";
-    }).reduce(function (sum, x) {
-      return sum + Number(x.amount || 0);
-    }, 0);
-
-    var settingsResult = await client.from("app_settings")
-      .select("me_share_percent")
-      .eq("id", 1)
-      .limit(1);
-    if (settingsResult.error) throw settingsResult.error;
-
-    var meSharePercent = Number(
-      ((settingsResult.data || [])[0] || { me_share_percent:50 }).me_share_percent
-    );
-    if (!Number.isFinite(meSharePercent)) meSharePercent = 50;
-
-    // Positive means うー owes にゃち; negative means にゃち owes うー.
-    var myShare = Math.round(total * meSharePercent / 100);
-    var net = paidByMe - myShare;
-    var originalAmount = Math.abs(net);
-    var lender = net >= 0 ? "me" : "partner";
-    var borrower = net >= 0 ? "partner" : "me";
-
-    var planResult = await client.from("repayment_plans")
-      .select("id,original_amount,remaining_amount,monthly_amount,lender,borrower")
-      .eq("is_demo", false)
-      .order("id")
-      .limit(1);
-    if (planResult.error) throw planResult.error;
-
-    var current = (planResult.data || [])[0] || null;
-    if (!current) {
-      var insertPlan = await client.from("repayment_plans").insert({
-        title: "立替金",
-        original_amount: originalAmount,
-        remaining_amount: originalAmount,
-        monthly_amount: 0,
-        lender: lender,
-        borrower: borrower,
-        is_demo: false
-      });
-      if (insertPlan.error) throw insertPlan.error;
-      return;
-    }
-
-    var sameDirection = current.lender === lender && current.borrower === borrower;
-    var repaid = sameDirection
-      ? Math.max(0, Number(current.original_amount || 0) - Number(current.remaining_amount || 0))
-      : 0;
-    var remainingAmount = Math.max(0, originalAmount - repaid);
-
-    var updatePlan = await client.from("repayment_plans")
-      .update({
-        original_amount: originalAmount,
-        remaining_amount: remainingAmount,
-        lender: lender,
-        borrower: borrower
-      })
-      .eq("id", current.id)
-      .eq("is_demo", false);
-    if (updatePlan.error) throw updatePlan.error;
   }
 
   async function addInitialExpense(expense) {
@@ -397,8 +381,6 @@
       .select("id,expense_date,item_name,amount,payer,memo")
       .single();
     if (result.error) throw result.error;
-
-    await syncInitialExpenseRepaymentPlan();
     return result.data;
   }
 
@@ -415,8 +397,6 @@
       .select("id,expense_date,item_name,amount,payer,memo")
       .single();
     if (result.error) throw result.error;
-
-    await syncInitialExpenseRepaymentPlan();
     return result.data;
   }
 
@@ -425,8 +405,6 @@
       .delete()
       .eq("id", id);
     if (result.error) throw result.error;
-
-    await syncInitialExpenseRepaymentPlan();
   }
 
   function nextMonthFirst(monthKey) {
@@ -480,8 +458,6 @@
       .select("id,me_share_percent,updated_at")
       .single();
     if (result.error) throw result.error;
-
-    await syncInitialExpenseRepaymentPlan();
     return result.data;
   }
 
@@ -538,19 +514,27 @@
     };
     if (!payload.merchant_name) throw new Error("店舗名を入力してください。");
 
-    var query;
-    if (rule.id) {
-      query = client.from("merchant_rules")
-        .update(payload)
-        .eq("id", Number(rule.id));
-    } else {
-      query = client.from("merchant_rules").insert(payload);
-    }
+    var rulesResult = await client.from("merchant_rules")
+      .select("id,merchant_name")
+      .eq("is_demo", false);
+    if (rulesResult.error) throw rulesResult.error;
+
+    var key = normalizeMerchantKey(payload.merchant_name);
+    var duplicate = (rulesResult.data || []).find(function (row) {
+      return normalizeMerchantKey(row.merchant_name) === key &&
+        Number(row.id) !== Number(rule.id || 0);
+    });
+
+    var targetId = rule.id || (duplicate && duplicate.id) || null;
+    var query = targetId
+      ? client.from("merchant_rules").update(payload).eq("id", Number(targetId))
+      : client.from("merchant_rules").insert(payload);
 
     var result = await query
       .select("id,merchant_name,scope,mode,is_demo,categories(name)")
       .single();
     if (result.error) throw result.error;
+
     return {
       id:result.data.id,
       merchant_name:result.data.merchant_name,
@@ -603,20 +587,28 @@
     if (result.error) throw result.error;
   }
 
-  async function getAuditLogs(limit) {
-    var rowLimit = Math.max(1, Math.min(Number(limit || 300), 500));
-    var result = await client.from("audit_logs")
-      .select("id,changed_at,actor_user_id,actor_email,action,table_name,record_id,changed_fields,before_data,after_data")
-      .order("changed_at", { ascending:false })
-      .limit(rowLimit);
-    if (result.error) throw result.error;
-    return result.data || [];
+  async function getAuditLogs() {
+    var pageSize = 1000;
+    var from = 0;
+    var all = [];
+
+    while (true) {
+      var result = await client.from("audit_logs")
+        .select("id,changed_at,actor_user_id,actor_email,action,table_name,record_id,changed_fields,before_data,after_data")
+        .order("changed_at", { ascending:false })
+        .range(from, from + pageSize - 1);
+      if (result.error) throw result.error;
+      var rows = result.data || [];
+      all = all.concat(rows);
+      if (rows.length < pageSize) break;
+      from += pageSize;
+    }
+    return all;
   }
 
   window.kakeiboDb = {
     client: client,
     getSession: getSession,
-    getAccountStatus: getAccountStatus,
     signInWithPassword: signInWithPassword,
     signUpWithPassword: signUpWithPassword,
     sendPasswordReset: sendPasswordReset,
@@ -626,7 +618,7 @@
     checkAccess: checkAccess,
     getInitialData: getInitialData,
     getAuditLogs: getAuditLogs,
-    classifyTransaction: classifyTransaction,
+    updateTransaction: updateTransaction,
     deleteTransaction: deleteTransaction,
     addManualTransaction: addManualTransaction,
     importCsvTransactions: importCsvTransactions,
