@@ -466,36 +466,40 @@
     var matchCandidates = state.data.transactions.filter(function (tx) {
       return normalizeText(tx.memo).indexOf("現金") === -1;
     });
-    var exactMerchant = matchCandidates.find(function (tx) {
-      return tx.date === row.date &&
-        Number(tx.amount) === Number(row.amount) &&
-        normalizeMerchant(tx.merchant_name) === merchantKey;
-    });
-    if (exactMerchant) {
-      return {
-        tx:exactMerchant,
-        reason:"同じ日・金額・利用先の明細があります"
-      };
-    }
 
-    var sameDateAmount = matchCandidates.find(function (tx) {
+    var sameDateAmount = matchCandidates.filter(function (tx) {
       return tx.date === row.date && Number(tx.amount) === Number(row.amount);
+    }).sort(function (a, b) {
+      var aExact = normalizeMerchant(a.merchant_name) === merchantKey ? 1 : 0;
+      var bExact = normalizeMerchant(b.merchant_name) === merchantKey ? 1 : 0;
+      return bExact - aExact;
     });
-    if (sameDateAmount) {
+
+    if (sameDateAmount.length) {
+      var hasExactMerchant = sameDateAmount.some(function (tx) {
+        return normalizeMerchant(tx.merchant_name) === merchantKey;
+      });
       return {
-        tx:sameDateAmount,
-        reason:"同じ日・同じ金額の明細があります"
+        tx:sameDateAmount[0],
+        txs:sameDateAmount,
+        reason:hasExactMerchant
+          ? "同じ日・金額・利用先の明細があります"
+          : "同じ日・同じ金額の明細があります"
       };
     }
 
-    var nearbyMerchant = matchCandidates.find(function (tx) {
+    var nearbyMerchant = matchCandidates.filter(function (tx) {
       return Number(tx.amount) === Number(row.amount) &&
         normalizeMerchant(tx.merchant_name) === merchantKey &&
         dateDistanceInDays(tx.date, row.date) <= 3;
+    }).sort(function (a, b) {
+      return dateDistanceInDays(a.date, row.date) - dateDistanceInDays(b.date, row.date);
     });
-    if (nearbyMerchant) {
+
+    if (nearbyMerchant.length) {
       return {
-        tx:nearbyMerchant,
+        tx:nearbyMerchant[0],
+        txs:nearbyMerchant,
         reason:"同じ利用先・金額の明細が前後3日以内にあります"
       };
     }
@@ -1239,7 +1243,7 @@
         row.duplicate = true;
         row.selected = false;
         row.matchReason = existing.reason;
-        row.matchedTx = existing.tx;
+        row.matchedTxs = existing.txs || [existing.tx];
       }
 
       seen[key] = true;
@@ -1326,7 +1330,7 @@
           row.duplicate = true;
           row.selected = false;
           row.matchReason = existing.reason;
-        row.matchedTx = existing.tx;
+        row.matchedTxs = existing.txs || [existing.tx];
         }
 
         seen[key] = true;
@@ -1391,7 +1395,7 @@
         row.duplicate = true;
         row.selected = false;
         row.matchReason = existing.reason;
-        row.matchedTx = existing.tx;
+        row.matchedTxs = existing.txs || [existing.tx];
       }
       csvSeen[csvKey] = true;
       result.push(row);
@@ -1401,22 +1405,26 @@
   }
 
   function csvMatchedTxDetails(row) {
-    var tx = row.matchedTx;
-    if (!tx) return "";
+    var matches = row.matchedTxs || (row.matchedTx ? [row.matchedTx] : []);
+    if (!matches.length) return "";
 
-    var txMeta = shortDate(tx.date) + " ・ " +
-      (tx.category_name || "その他") + " ・ " + scopeLabel(tx.scope);
-    var memo = normalizeText(tx.memo);
+    var cards = matches.map(function (tx, matchIndex) {
+      var txMeta = shortDate(tx.date) + " ・ " +
+        (tx.category_name || "その他") + " ・ " + scopeLabel(tx.scope);
+      var memo = normalizeText(tx.memo);
+
+      return '<div class="csv-match-detail">' +
+        '<div class="csv-match-detail-kicker">家計簿にある候補 ' + (matchIndex + 1) + '</div>' +
+        '<div class="csv-match-detail-head"><strong>' +
+        escapeHtml(tx.merchant_name || "利用先未設定") + '</strong><b>' + yen(tx.amount) + '</b></div>' +
+        '<div class="csv-match-detail-meta">' + escapeHtml(txMeta) + '</div>' +
+        (memo ? '<div class="csv-match-detail-memo">メモ：' + escapeHtml(memo) + '</div>' : '') +
+        '</div>';
+    }).join("");
 
     return '<details class="csv-match-compare">' +
-      '<summary>似ている明細を見る</summary>' +
-      '<div class="csv-match-detail">' +
-      '<div class="csv-match-detail-kicker">家計簿にある候補</div>' +
-      '<div class="csv-match-detail-head"><strong>' +
-      escapeHtml(tx.merchant_name || "利用先未設定") + '</strong><b>' + yen(tx.amount) + '</b></div>' +
-      '<div class="csv-match-detail-meta">' + escapeHtml(txMeta) + '</div>' +
-      (memo ? '<div class="csv-match-detail-memo">メモ：' + escapeHtml(memo) + '</div>' : '') +
-      '</div></details>';
+      '<summary>似ている明細を見る（' + matches.length + '件）</summary>' +
+      '<div class="csv-match-detail-list">' + cards + '</div></details>';
   }
 
   function csvReviewRow(row, index) {
