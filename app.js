@@ -443,6 +443,28 @@
     });
   });
 
+  document.getElementById("deleteTransactionButton").addEventListener("click", async function () {
+    var id = Number(document.getElementById("classifyId").value);
+    var tx = state.data.transactions.find(function (x) {
+      return Number(x.id) === id;
+    });
+    if (!tx) return;
+
+    var ok = window.confirm("「" + tx.merchant_name + "」" + yen(tx.amount) + " を削除しますか？\nこの操作は元に戻せません。");
+    if (!ok) return;
+
+    try {
+      await window.kakeiboDb.deleteTransaction(id);
+      document.getElementById("classifyDialog").close();
+      state.currentClassifyId = null;
+      state.data = await window.kakeiboDb.getInitialData();
+      render();
+    } catch (e) {
+      console.error(e);
+      alert("明細を削除できませんでした。");
+    }
+  });
+
   document.getElementById("classifyForm").addEventListener("submit", async function () {
     var id = Number(document.getElementById("classifyId").value);
     var category = document.getElementById("classifyCategory").value;
