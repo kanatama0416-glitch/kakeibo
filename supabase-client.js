@@ -79,7 +79,10 @@
       client.from("initial_expenses")
         .select("id,expense_date,item_name,amount,payer,memo,created_at")
         .order("expense_date", { ascending: false })
-        .order("id", { ascending: false })
+        .order("id", { ascending: false }),
+      client.from("monthly_carryovers")
+        .select("id,from_month,to_month,category,amount,updated_at")
+        .order("from_month", { ascending: true })
     ]);
 
     results.forEach(function (r) {
@@ -133,6 +136,16 @@
           amount:x.amount,
           payer:x.payer,
           memo:x.memo
+        };
+      }),
+      carryovers: (results[6].data || []).map(function (x) {
+        return {
+          id:x.id,
+          from_month:x.from_month,
+          to_month:x.to_month,
+          category:x.category,
+          amount:x.amount,
+          updated_at:x.updated_at
         };
       })
     };
@@ -274,6 +287,34 @@
     return result.data;
   }
 
+  function nextMonthFirst(monthKey) {
+    var parts = monthKey.split("-");
+    var year = Number(parts[0]);
+    var month = Number(parts[1]) + 1;
+    if (month > 12) {
+      year += 1;
+      month = 1;
+    }
+    return year + "-" + String(month).padStart(2, "0") + "-01";
+  }
+
+  async function saveCarryover(category, fromMonth, amount) {
+    var row = {
+      from_month: fromMonth + "-01",
+      to_month: nextMonthFirst(fromMonth),
+      category: category,
+      amount: Number(amount),
+      updated_at: new Date().toISOString()
+    };
+
+    var result = await client.from("monthly_carryovers")
+      .upsert(row, { onConflict: "from_month,category" })
+      .select("id,from_month,to_month,category,amount,updated_at")
+      .single();
+    if (result.error) throw result.error;
+    return result.data;
+  }
+
   async function updateRepaymentAmount(planId, amount) {
     var result = await client.from("repayment_plans")
       .update({ monthly_amount: amount })
@@ -293,6 +334,7 @@
     classifyTransaction: classifyTransaction,
     addManualTransaction: addManualTransaction,
     addInitialExpense: addInitialExpense,
+    saveCarryover: saveCarryover,
     updateRepaymentAmount: updateRepaymentAmount
   };
 })();
