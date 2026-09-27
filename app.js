@@ -516,7 +516,7 @@
   function parseRakutenPdfText(text) {
     var source = normalizeText(text).replace(/\s+/g, " ");
     var rows = [];
-    var pattern = /(20\d{2}[\/\.\-]\d{1,2}[\/\.\-]\d{1,2})\s+(.{2,100}?)\s+(?:本人\*?|家族\*?)\s+(?:1回払い|一括払い|分割払い|リボ払い|ボーナス払い)\s+([0-9][0-9,]*)/g;
+    var pattern = /(20\d{2}[\/\.\-]\d{1,2}[\/\.\-]\d{1,2})\s+((?:(?!20\d{2}[\/\.\-]\d{1,2}[\/\.\-]\d{1,2}).){2,100}?)\s+(?:本人\*?|家族\*?)\s+(?:1回払い|一括払い|分割払い|リボ払い|ボーナス払い)\s+([0-9][0-9,]*)/g;
     var match;
 
     while ((match = pattern.exec(source)) !== null) {
@@ -733,11 +733,6 @@
     } else {
       extracted.rows.forEach(function (pdfRow) {
         var parsed = parseRakutenPdfStatementRow(pdfRow) || parsePdfStatementRow(pdfRow, defaultYear);
-      if (!parsed) {
-        if (pdfDateMatch(pdfRow.text)) ignored += 1;
-        return;
-      }
-
         if (!parsed) {
           if (pdfDateMatch(pdfRow.text)) ignored += 1;
           return;
