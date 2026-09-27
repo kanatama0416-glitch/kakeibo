@@ -603,6 +603,16 @@
     if (result.error) throw result.error;
   }
 
+  async function getAuditLogs(limit) {
+    var rowLimit = Math.max(1, Math.min(Number(limit || 300), 500));
+    var result = await client.from("audit_logs")
+      .select("id,changed_at,actor_user_id,actor_email,action,table_name,record_id,changed_fields,before_data,after_data")
+      .order("changed_at", { ascending:false })
+      .limit(rowLimit);
+    if (result.error) throw result.error;
+    return result.data || [];
+  }
+
   window.kakeiboDb = {
     client: client,
     getSession: getSession,
@@ -615,6 +625,7 @@
     onAuthStateChange: onAuthStateChange,
     checkAccess: checkAccess,
     getInitialData: getInitialData,
+    getAuditLogs: getAuditLogs,
     classifyTransaction: classifyTransaction,
     deleteTransaction: deleteTransaction,
     addManualTransaction: addManualTransaction,
