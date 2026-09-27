@@ -97,10 +97,6 @@
         .select("id,transaction_date,merchant_name,merchant_raw,amount,scope,payer,status,source,memo,is_demo,categories(name)")
         .eq("is_demo", false)
         .order("transaction_date", { ascending: false }),
-      client.from("loans")
-        .select("id,loan_date,description,amount,lender,borrower,status,memo,is_demo")
-        .eq("is_demo", false)
-        .order("loan_date", { ascending: false }),
       client.from("repayment_plans")
         .select("id,title,original_amount,remaining_amount,monthly_amount,lender,borrower,is_demo")
         .eq("is_demo", false)
@@ -159,20 +155,8 @@
           memo:t.memo
         };
       }),
-      loans: (results[3].data || []).map(function (x) {
-        return {
-          id:x.id,
-          date:x.loan_date,
-          description:x.description,
-          amount:x.amount,
-          lender:x.lender,
-          borrower:x.borrower,
-          status:x.status,
-          memo:x.memo
-        };
-      }),
-      repayment_plan: (results[4].data || [])[0] || null,
-      initial_expenses: (results[5].data || []).map(function (x) {
+      repayment_plan: (results[3].data || [])[0] || null,
+      initial_expenses: (results[4].data || []).map(function (x) {
         return {
           id:x.id,
           date:x.expense_date,
@@ -182,7 +166,7 @@
           memo:x.memo
         };
       }),
-      carryovers: (results[6].data || []).map(function (x) {
+      carryovers: (results[5].data || []).map(function (x) {
         return {
           id:x.id,
           from_month:x.from_month,
@@ -192,12 +176,12 @@
           updated_at:x.updated_at
         };
       }),
-      settings: (results[7].data || [])[0] || {
+      settings: (results[6].data || [])[0] || {
         id:1,
         me_share_percent:50,
         updated_at:null
       },
-      settlements: (results[8].data || []).map(function (x) {
+      settlements: (results[7].data || []).map(function (x) {
         return {
           id:x.id,
           settlement_month:x.settlement_month,
@@ -207,7 +191,7 @@
           updated_at:x.updated_at
         };
       }),
-      repayment_amounts: (results[9].data || []).map(function (x) {
+      repayment_amounts: (results[8].data || []).map(function (x) {
         return {
           id:x.id,
           repayment_plan_id:Number(x.repayment_plan_id),
@@ -216,7 +200,7 @@
           updated_at:x.updated_at
         };
       }),
-      repayments: (results[10].data || []).map(function (x) {
+      repayments: (results[9].data || []).map(function (x) {
         return {
           id:x.id,
           repayment_plan_id:Number(x.repayment_plan_id),
@@ -269,23 +253,6 @@
       .eq("id", id)
       .eq("is_demo", false);
     if (result.error) throw result.error;
-  }
-
-  async function addLoan(loan) {
-    var borrower = loan.lender === "me" ? "partner" : "me";
-    var result = await client.from("loans").insert({
-      loan_date: loan.date,
-      description: loan.description,
-      amount: loan.amount,
-      lender: loan.lender,
-      borrower: borrower,
-      status: "open",
-      memo: loan.memo || null,
-      is_demo: false
-    }).select("id,loan_date,description,amount,lender,borrower,status,memo").single();
-
-    if (result.error) throw result.error;
-    return result.data;
   }
 
   async function addManualTransaction(tx) {
@@ -650,7 +617,6 @@
     getInitialData: getInitialData,
     classifyTransaction: classifyTransaction,
     deleteTransaction: deleteTransaction,
-    addLoan: addLoan,
     addManualTransaction: addManualTransaction,
     importCsvTransactions: importCsvTransactions,
     addInitialExpense: addInitialExpense,
