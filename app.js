@@ -31,6 +31,7 @@
   }
 
   function actualMonthKey() {
+    if (window.KAKEIBO_TEST_MODE === true) return "2026-12";
     var now = new Date();
     var local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
     return local.toISOString().slice(0, 7);
