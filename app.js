@@ -272,7 +272,7 @@
     list.innerHTML = '<p class="audit-empty">履歴を読み込んでいます…</p>';
     dialog.showModal();
     try {
-      renderAuditHistory(await window.kakeiboDb.getAuditLogs(300));
+      renderAuditHistory(await window.kakeiboDb.getAuditLogs());
     } catch (error) {
       console.error(error);
       list.innerHTML = '<p class="audit-empty audit-error">変更履歴を読み込めませんでした。</p>';
@@ -2473,7 +2473,11 @@
       render();
     } catch (error) {
       console.error(error);
-      alert("負担割合を保存できませんでした。");
+      alert(
+        String((error && error.message) || "").indexOf("SETTLED_HISTORY_SHARE_LOCKED") !== -1
+          ? "精算済みの履歴があるため負担割合は変更できません。変更する場合は、先に支払済み記録を取り消してください。"
+          : "負担割合を保存できませんでした。"
+      );
     } finally {
       if (button) button.disabled = false;
     }
@@ -2648,7 +2652,7 @@
   });
 
   document.getElementById("csvImportButton").addEventListener("click", async function () {
-    var selected = state.csvRows.filter(function (row) { return row.selected; });
+    var selected = state.csvRows.filter(function (row) { return row.selected && !row.disabled; });
     if (!selected.length) return;
 
     var payer = document.getElementById("csvPayer").value;
@@ -2666,7 +2670,12 @@
         category_name:row.category_name,
         scope:row.scope,
         payer:payer,
-        memo:state.importFileType === "pdf" ? "PDF取込" : "CSV取込"
+        memo:state.importFileType === "pdf" ? "PDF取込" : "CSV取込",
+        source:state.importFileType === "pdf" ? "pdf" : "csv",
+        card_provider:document.getElementById("csvCardCompany").value || null,
+        card_label:document.getElementById("csvCardCompany").value === "rakuten"
+          ? "楽天カード"
+          : "エポスカード"
       };
     });
 
@@ -2708,7 +2717,7 @@
 
   document.getElementById("payCurrentSettlementButton").addEventListener("click", async function () {
     var sourceMonth = addMonths(state.currentMonth, -1);
-    if (sourceMonth < earliestAvailableMonth()) return;
+    if (sourceMonth < OPERATION_START_MONTH || state.currentMonth > actualMonthKey()) return;
     if (paidSettlementRecord(sourceMonth)) return;
 
     var summary = calculateSummary(sourceMonth);
@@ -2782,6 +2791,10 @@
   document.getElementById("cancelLivingCarryoverButton").addEventListener("click", async function () {
     var livingOut = carryOutRecord("living");
     if (!livingOut) return;
+    if (paidSettlementRecord(state.currentMonth)) {
+      alert("この月は精算済みです。繰越を取り消す場合は、先に翌月の支払済み記録を取り消してください。");
+      return;
+    }
 
     var nextMonth = addMonths(state.currentMonth, 1);
     var ok = window.confirm(
@@ -2808,6 +2821,10 @@
       var summary = calculateSummary();
       var available = Math.abs(summary.livingSettlement);
       if (!available) return;
+      if (paidSettlementRecord(state.currentMonth)) {
+        alert("この月は精算済みです。繰越を変更する場合は、先に翌月の支払済み記録を取り消してください。");
+        return;
+      }
 
       var selectedAmount = Number(document.getElementById("livingCarryoverInput").value || 0);
       if (!Number.isFinite(selectedAmount) || selectedAmount < 0) {
@@ -2861,7 +2878,15 @@
     });
     if (!tx) return;
 
-    var ok = window.confirm("「" + tx.merchant_name + "」" + yen(tx.amount) + " を削除しますか？\nこの操作は元に戻せません。");
+    if (paidSettlementRecord(monthKeyFromDate(tx.date))) {
+      alert("この月は精算済みです。削除する場合は、先に翌月の「支払済みを取り消す」を実行してください。");
+      return;
+    }
+
+    var ok = window.confirm(
+      "「" + tx.merchant_name + "」" + yen(tx.amount) +
+      " を削除しますか？\nこの操作は元に戻せません。"
+    );
     if (!ok) return;
 
     try {
@@ -2876,60 +2901,94 @@
     }
   });
 
-  document.getElementById("classifyForm").addEventListener("submit", async function () {
-    var id = Number(document.getElementById("classifyId").value);
-    var category = document.getElementById("classifyCategory").value;
-    var scope = document.getElementById("classifyScope").value;
-    var payer = document.getElementById("classifyPayer").value;
-    var remember = document.getElementById("ruleMode").value === "merchant";
+  document.getElementById("classifyForm").addEventListener("submit", async function (event) {
+    event.preventDefault();
 
-    var tx = state.data.transactions.find(function (x) {
+    var id = Number(document.getElementById("classifyId").value);
+    var existing = state.data.transactions.find(function (x) {
       return Number(x.id) === id;
     });
-    if (tx) {
-      tx.category_name = category;
-      tx.scope = scope;
-      tx.payer = payer;
-      tx.status = "confirmed";
-      if (remember) {
-        state.data.merchant_rules.push({
-          id:"local-" + Date.now(),
-          merchant_name:tx.merchant_name,
-          category_name:category,
-          scope:scope,
-          mode:"auto"
-        });
-      }
+    if (!existing) return;
+
+    var tx = {
+      date:document.getElementById("classifyDate").value,
+      merchant_name:document.getElementById("classifyMerchantName").value.trim(),
+      amount:Number(document.getElementById("classifyAmount").value || 0),
+      category_name:document.getElementById("classifyCategory").value,
+      scope:document.getElementById("classifyScope").value,
+      payer:document.getElementById("classifyPayer").value,
+      memo:document.getElementById("classifyMemo").value.trim()
+    };
+    var remember = document.getElementById("ruleMode").value === "merchant";
+
+    if (!tx.date || !tx.merchant_name || tx.amount === 0 || !tx.category_name) return;
+    if (monthKeyFromDate(tx.date) < OPERATION_START_MONTH) {
+      alert(monthLabel(OPERATION_START_MONTH) + "運用開始前の日付には変更できません。");
+      return;
+    }
+
+    var sensitiveChanged =
+      existing.date !== tx.date ||
+      Number(existing.amount) !== Number(tx.amount) ||
+      (existing.scope || "") !== tx.scope ||
+      (existing.payer || "") !== tx.payer;
+
+    if (
+      sensitiveChanged &&
+      (
+        paidSettlementRecord(monthKeyFromDate(existing.date)) ||
+        paidSettlementRecord(monthKeyFromDate(tx.date))
+      )
+    ) {
+      alert("精算済みの月の金額・日付・支払者・支出区分は変更できません。先に支払済み記録を取り消してください。");
+      return;
     }
 
     try {
-      await window.kakeiboDb.classifyTransaction(id, category, scope, payer, remember);
+      await window.kakeiboDb.updateTransaction(id, tx, remember);
       state.data = await window.kakeiboDb.getInitialData();
+      document.getElementById("classifyDialog").close();
       render();
     } catch (e) {
       console.error(e);
-      alert("明細の変更を保存できませんでした。");
+      var message = String((e && e.message) || "");
+      alert(
+        message.indexOf("SETTLED_MONTH_LOCKED") !== -1
+          ? "精算済みの月は変更できません。先に支払済み記録を取り消してください。"
+          : "明細の変更を保存できませんでした。"
+      );
     }
   });
 
-  document.getElementById("manualExpenseForm").addEventListener("submit", async function () {
+  document.getElementById("manualExpenseForm").addEventListener("submit", async function (event) {
+    event.preventDefault();
+
     var tx = {
-      date: document.getElementById("manualExpenseDate").value,
-      merchant_name: document.getElementById("manualExpenseName").value.trim(),
-      amount: Number(document.getElementById("manualExpenseAmount").value || 0),
-      category_name: document.getElementById("manualExpenseCategory").value,
-      scope: document.getElementById("manualExpenseScope").value,
-      payer: document.getElementById("manualExpensePayer").value,
-      memo: document.getElementById("manualExpenseMemo").value.trim()
+      date:document.getElementById("manualExpenseDate").value,
+      merchant_name:document.getElementById("manualExpenseName").value.trim(),
+      amount:Number(document.getElementById("manualExpenseAmount").value || 0),
+      category_name:document.getElementById("manualExpenseCategory").value,
+      scope:document.getElementById("manualExpenseScope").value,
+      payer:document.getElementById("manualExpensePayer").value,
+      memo:document.getElementById("manualExpenseMemo").value.trim()
     };
 
-    if (!tx.date || !tx.merchant_name || tx.amount < 0 || !tx.category_name) return;
+    if (!tx.date || !tx.merchant_name || tx.amount === 0 || !tx.category_name) return;
+    if (monthKeyFromDate(tx.date) < OPERATION_START_MONTH) {
+      alert(monthLabel(OPERATION_START_MONTH) + "運用開始前の支出は追加できません。");
+      return;
+    }
+    if (paidSettlementRecord(monthKeyFromDate(tx.date))) {
+      alert("この月は精算済みです。追加する場合は先に支払済み記録を取り消してください。");
+      return;
+    }
 
     try {
       await window.kakeiboDb.addManualTransaction(tx);
       state.data = await window.kakeiboDb.getInitialData();
       document.getElementById("manualExpenseForm").reset();
       setDefaultEntryDates();
+      document.getElementById("manualExpenseDialog").close();
       render();
     } catch (e) {
       console.error(e);
@@ -2937,33 +2996,41 @@
     }
   });
 
-  document.getElementById("initialExpenseForm").addEventListener("submit", async function () {
+  document.getElementById("initialExpenseForm").addEventListener("submit", async function (event) {
+    event.preventDefault();
+
     var id = Number(document.getElementById("initialExpenseId").value || 0);
     var expense = {
-      item_name: document.getElementById("initialExpenseItem").value.trim(),
-      amount: Number(document.getElementById("initialExpenseAmount").value || 0),
-      payer: document.getElementById("initialExpensePayer").value,
-      date: document.getElementById("initialExpenseDate").value,
-      memo: document.getElementById("initialExpenseMemo").value.trim()
+      item_name:document.getElementById("initialExpenseItem").value.trim(),
+      amount:Number(document.getElementById("initialExpenseAmount").value || 0),
+      payer:document.getElementById("initialExpensePayer").value,
+      date:document.getElementById("initialExpenseDate").value,
+      memo:document.getElementById("initialExpenseMemo").value.trim()
     };
 
     if (!expense.item_name || !expense.date || expense.amount <= 0) return;
 
     try {
-      if (id) {
-        await window.kakeiboDb.updateInitialExpense(id, expense);
-      } else {
-        await window.kakeiboDb.addInitialExpense(expense);
-      }
+      if (id) await window.kakeiboDb.updateInitialExpense(id, expense);
+      else await window.kakeiboDb.addInitialExpense(expense);
+
       state.data = await window.kakeiboDb.getInitialData();
       document.getElementById("initialExpenseForm").reset();
       document.getElementById("initialExpenseId").value = "";
       document.getElementById("deleteInitialExpenseButton").classList.add("hidden");
       setDefaultEntryDates();
+      document.getElementById("initialExpenseDialog").close();
       render();
     } catch (e) {
       console.error(e);
-      alert("立替金を保存できませんでした。");
+      var message = String((e && e.message) || "");
+      alert(
+        message.indexOf("REPAYMENT_DIRECTION_LOCKED") !== -1
+          ? "返済済み記録があるため、貸し借りの向きが逆転する変更はできません。先に該当月の支払済み記録を取り消してください。"
+          : message.indexOf("REPAYMENT_PRINCIPAL_BELOW_PAID") !== -1
+            ? "すでに返済した合計額より立替金総額を小さくできません。先に該当月の支払済み記録を取り消してください。"
+            : "立替金を保存できませんでした。"
+      );
     }
   });
 
@@ -3017,6 +3084,10 @@
     event.preventDefault();
     var amount = Number(document.getElementById("repaymentInput").value || 0);
     if (!Number.isFinite(amount) || amount < 0 || !state.data.repayment_plan) return;
+    if (paidSettlementRecord(state.currentMonth)) {
+      alert("この月は精算済みです。返済額を変更する場合は、先に翌月の支払済み記録を取り消してください。");
+      return;
+    }
 
     var button = event.submitter;
     if (button) button.disabled = true;
