@@ -297,7 +297,7 @@
     window.pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl();
 
     var loadingTask = window.pdfjsLib.getDocument({
-      data: new Uint8Array(buffer)
+      data: new Uint8Array(buffer.slice(0))
     });
     var pdf;
 
@@ -376,7 +376,7 @@
 
     window.pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl();
     var loadingTask = window.pdfjsLib.getDocument({
-      data:new Uint8Array(buffer)
+      data:new Uint8Array(buffer.slice(0))
     });
 
     try {
@@ -513,6 +513,58 @@
       .replace(/\s{2,}/g, " ");
   }
 
+  function parseRakutenPdfStatementRow(row) {
+    if (!row || !row.items || !row.items.length) return null;
+
+    var dateItem = row.items.find(function (item) {
+      return item.x < 75 && /^20\d{2}[\/.\-]\d{1,2}[\/.\-]\d{1,2}$/.test(normalizeText(item.text));
+    });
+    if (!dateItem) return null;
+
+    var date = parseCsvDate(dateItem.text);
+    if (!date) return null;
+
+    var merchantItems = row.items.filter(function (item) {
+      return item.x >= 58 && item.x < 220;
+    }).filter(function (item) {
+      var text = normalizeText(item.text);
+      if (!text) return false;
+      if (/^(本人\*?|家族\*?)$/.test(text)) return false;
+      if (/^(?:1回払い|一括払い|分割払い|リボ払い|ボーナス払い)$/.test(text)) return false;
+      return true;
+    });
+
+    var merchant = cleanPdfMerchant(merchantItems.map(function (item) {
+      return item.text;
+    }).join(" "));
+
+    merchant = merchant
+      .replace(/利用国[A-Z]{3}/g, "")
+      .replace(/本人\*?/g, "")
+      .replace(/家族\*?/g, "")
+      .replace(/1回払い|一括払い|分割払い|リボ払い|ボーナス払い/g, "")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+
+    var amountCandidates = row.items.filter(function (item) {
+      return item.x >= 270 && item.x < 345;
+    }).map(function (item) {
+      return parsePdfAmountToken(item.text);
+    }).filter(function (value) {
+      return value != null;
+    });
+
+    var amount = amountCandidates.length ? amountCandidates[0] : null;
+    if (!amount || !merchant) return null;
+
+    return {
+      date:date,
+      merchant_name:merchant,
+      merchant_raw:normalizeText(row.text),
+      amount:amount
+    };
+  }
+
   function parsePdfStatementRow(row, defaultYear) {
     var text = normalizeText(row.text);
     if (!text) return null;
@@ -616,7 +668,7 @@
     var seen = {};
 
     extracted.rows.forEach(function (pdfRow) {
-      var parsed = parsePdfStatementRow(pdfRow, defaultYear);
+      var parsed = parseRakutenPdfStatementRow(pdfRow) || parsePdfStatementRow(pdfRow, defaultYear);
       if (!parsed) {
         if (pdfDateMatch(pdfRow.text)) ignored += 1;
         return;
@@ -665,7 +717,7 @@
       seen = {};
 
       ocrExtracted.rows.forEach(function (pdfRow) {
-        var parsed = parsePdfStatementRow(pdfRow, ocrDefaultYear);
+        var parsed = parseRakutenPdfStatementRow(pdfRow) || parsePdfStatementRow(pdfRow, ocrDefaultYear);
         if (!parsed) {
           if (pdfDateMatch(pdfRow.text)) ignored += 1;
           return;
