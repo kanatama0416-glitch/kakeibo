@@ -206,7 +206,8 @@
         if (!amount || !monthTotal) return "";
         var segmentHeight = amount / monthTotal * 100;
         return '<span class="stack-segment" title="' + escapeHtml(category) + ' ' + yen(amount) +
-          '" style="height:' + segmentHeight + '%;background:' + colorMap[category] + '"></span>';
+          '" style="height:' + segmentHeight + '%;background:' + colorMap[category] + '">' +
+          '<b class="stack-segment-value">' + yen(amount) + '</b></span>';
       }).join("");
 
       return '<div class="stack-month">' +
