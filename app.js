@@ -1,5 +1,6 @@
 (function () {
   var OPERATION_START_MONTH = "2026-10";
+  var REPAYMENT_START_MONTH = "2026-10";
 
   function monthKeyFromDate(value) {
     return value ? String(value).slice(0, 7) : "";
@@ -1486,6 +1487,32 @@
     }) || null;
   }
 
+  function repaymentRecord(monthKey) {
+    return (state.data.repayments || []).find(function (x) {
+      return monthKeyFromDate(x.repayment_date) === monthKey;
+    }) || null;
+  }
+
+  function repaymentAmountForMonth(monthKey, plan) {
+    if (!plan || !plan.id || monthKey < REPAYMENT_START_MONTH) return 0;
+
+    var recorded = repaymentRecord(monthKey);
+    if (recorded) return Number(recorded.amount || 0);
+
+    var monthlyAmount = Math.max(0, Number(plan.monthly_amount || 0));
+    var originalAmount = Math.max(0, Number(plan.original_amount || 0));
+    if (!monthlyAmount || !originalAmount) return 0;
+
+    var repaidBefore = (state.data.repayments || []).filter(function (x) {
+      return monthKeyFromDate(x.repayment_date) < monthKey;
+    }).reduce(function (sum, x) {
+      return sum + Number(x.amount || 0);
+    }, 0);
+
+    var outstandingBeforeMonth = Math.max(0, originalAmount - repaidBefore);
+    return Math.min(monthlyAmount, outstandingBeforeMonth);
+  }
+
   function calculateSummary(monthKey) {
     var targetMonth = monthKey || state.currentMonth;
     var monthTransactions = state.data.transactions.filter(function (t) {
@@ -1524,7 +1551,8 @@
     var plan = state.data.repayment_plan || {
       id:null, original_amount:0, remaining_amount:0, monthly_amount:0, lender:"me", borrower:"partner"
     };
-    var repaymentNet = plan.lender === "me" ? Number(plan.monthly_amount) : -Number(plan.monthly_amount);
+    var monthlyRepayment = repaymentAmountForMonth(targetMonth, plan);
+    var repaymentNet = plan.lender === "me" ? monthlyRepayment : -monthlyRepayment;
     var finalSettlement = livingPayNow + repaymentNet;
 
     return {
@@ -1542,6 +1570,7 @@
       loanCurrent:loanCurrent,
       carryInLoan:carryInLoan,
       loanNet:loanNet,
+      monthlyRepayment:monthlyRepayment,
       repaymentNet:repaymentNet,
       finalSettlement:finalSettlement,
       plan:plan,
@@ -1594,7 +1623,9 @@
     card.classList.toggle("paid", isPaid);
     status.classList.remove("unpaid", "paid", "none");
 
-    if (!hasSourceMonth || amount === 0) {
+    var hasRepaymentToSettle = !!(sourceSummary && Number(sourceSummary.monthlyRepayment || 0) > 0);
+
+    if (!hasSourceMonth || (amount === 0 && !hasRepaymentToSettle)) {
       status.classList.add("none");
       status.textContent = "支払いなし";
       document.getElementById("paymentDueDirection").textContent =
@@ -1606,7 +1637,10 @@
       return;
     }
 
-    document.getElementById("paymentDueDirection").textContent = directionText(amount);
+    document.getElementById("paymentDueDirection").textContent =
+      amount === 0 && hasRepaymentToSettle
+        ? "生活費と返済を相殺して、支払いは0円です"
+        : directionText(amount);
 
     if (isPaid) {
       status.classList.add("paid");
@@ -1620,7 +1654,10 @@
       status.classList.add("unpaid");
       status.textContent = "未払い";
       document.getElementById("paymentDueMeta").textContent =
-        monthLabel(sourceMonth) + "分を" + monthLabel(paymentMonth) + "末に精算します。";
+        monthLabel(sourceMonth) + "分を" + monthLabel(paymentMonth) + "末に精算します。" +
+        (sourceSummary && sourceSummary.monthlyRepayment
+          ? " 返済 " + yen(sourceSummary.monthlyRepayment) + " を含みます。"
+          : "");
       payButton.classList.remove("hidden");
       payButton.disabled = false;
       payButton.textContent = "払ったよー";
@@ -1648,13 +1685,14 @@
     document.getElementById("monthlyTotal").textContent = yen(summary.total);
     document.getElementById("myShare").textContent = yen(summary.myShare);
     document.getElementById("partnerShare").textContent = yen(summary.partnerShare);
-    document.getElementById("monthlyRepayment").textContent = yen(summary.plan.monthly_amount);
+    document.getElementById("monthlyRepayment").textContent = yen(summary.monthlyRepayment);
     document.getElementById("remainingDebt").textContent = "残り " + yen(summary.plan.remaining_amount);
     document.getElementById("debtRemaining").textContent = yen(summary.plan.remaining_amount);
-    document.getElementById("repaymentBadge").textContent = selectedMonthLabel + "分 " + yen(summary.plan.monthly_amount);
+    document.getElementById("repaymentBadge").textContent = selectedMonthLabel + "分 " + yen(summary.monthlyRepayment);
     document.getElementById("debtMeta").textContent =
       "総額 " + yen(summary.plan.original_amount) + " ・ 返済済 " +
-      yen(summary.plan.original_amount - summary.plan.remaining_amount);
+      yen(summary.plan.original_amount - summary.plan.remaining_amount) +
+      " ・ " + monthLabel(REPAYMENT_START_MONTH) + "分から返済";
 
     var progress = summary.plan.original_amount
       ? ((summary.plan.original_amount - summary.plan.remaining_amount) / summary.plan.original_amount * 100)
@@ -2404,11 +2442,18 @@
 
     var summary = calculateSummary(sourceMonth);
     var amount = Number(summary.finalSettlement || 0);
-    if (!amount) return;
+    var repaymentAmount = Number(summary.monthlyRepayment || 0);
+    if (!amount && !repaymentAmount) return;
+
+    var settlementDirection = amount === 0
+      ? "生活費と返済を相殺して、支払いは0円"
+      : directionText(amount);
 
     var ok = window.confirm(
       monthLabel(sourceMonth) + "分 " + yen(Math.abs(amount)) + "\n" +
-      directionText(amount) + "\n\n支払い済みにしますか？"
+      settlementDirection +
+      (repaymentAmount ? "\n返済 " + yen(repaymentAmount) + " を含みます" : "") +
+      "\n\n精算済みにしますか？"
     );
     if (!ok) return;
 
@@ -2417,7 +2462,7 @@
     button.textContent = "保存しています…";
 
     try {
-      await window.kakeiboDb.savePaidSettlement(sourceMonth, amount);
+      await window.kakeiboDb.savePaidSettlement(sourceMonth, amount, repaymentAmount);
       state.data = await window.kakeiboDb.getInitialData();
       render();
     } catch (e) {
