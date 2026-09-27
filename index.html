@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#f6f7f9">
   <title>ふたり家計</title>
-  <link rel="stylesheet" href="./styles.css?v=20260927-1407">
+  <link rel="stylesheet" href="./styles.css?v=20260927-CSV1">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -120,6 +120,7 @@
           <h2>明細</h2>
           <p>生活費と個人支出をまとめて確認</p>
         </div>
+        <button type="button" class="soft-button csv-import-open" data-open="csvImportDialog">CSV明細を読み込む</button>
         <div class="chips">
           <button class="chip active" data-filter="all">すべて</button>
           <button class="chip" data-filter="shared">共同</button>
@@ -321,6 +322,50 @@
     </form>
   </dialog>
 
+  <dialog id="csvImportDialog" class="csv-import-dialog">
+    <div class="dialog-card">
+      <div class="dialog-head"><h3>CSV明細を読み込む</h3><button type="button" data-close-dialog>×</button></div>
+      <p class="csv-help">カード会社から出したCSVを読み込み、家計簿にすでにある明細と照合します。登録は確認後にだけ行います。</p>
+
+      <label>このカードを使った人
+        <select id="csvPayer">
+          <option value="me">にゃち</option>
+          <option value="partner">うー</option>
+        </select>
+      </label>
+
+      <label class="csv-file-label">CSVファイル
+        <input id="csvFileInput" type="file" accept=".csv,text/csv">
+      </label>
+      <p id="csvFileMessage" class="csv-file-message">まだファイルは選ばれていません。</p>
+
+      <div id="csvReviewArea" class="hidden">
+        <div class="csv-summary">
+          <div><strong id="csvNewCount">0</strong><span>未記入っぽい</span></div>
+          <div><strong id="csvDuplicateCount">0</strong><span>記入済み候補</span></div>
+        </div>
+
+        <section id="csvNewSection" class="csv-review-section">
+          <div class="csv-section-head">
+            <div><h4>未記入っぽい明細</h4><p>最初から登録対象にしています。</p></div>
+            <button id="csvSelectNewButton" type="button" class="csv-text-button">すべて選択</button>
+          </div>
+          <div id="csvNewList" class="csv-review-list"></div>
+        </section>
+
+        <section id="csvDuplicateSection" class="csv-review-section">
+          <div class="csv-section-head">
+            <div><h4>記入済み候補</h4><p>重複しそうなので、最初は登録対象から外しています。</p></div>
+            <button id="csvSelectDuplicateButton" type="button" class="csv-text-button">すべて選択</button>
+          </div>
+          <div id="csvDuplicateList" class="csv-review-list"></div>
+        </section>
+
+        <button id="csvImportButton" class="primary-button" type="button" disabled>選んだ明細を反映する</button>
+      </div>
+    </div>
+  </dialog>
+
   <dialog id="repaymentDialog">
     <form method="dialog" class="dialog-card" id="repaymentForm">
       <div class="dialog-head"><h3>今月の返済額</h3><button type="button" data-close-dialog>×</button></div>
@@ -342,8 +387,8 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./config.js"></script>
-  <script src="./supabase-client.js?v=20260927-1426"></script>
-  <script src="./app.js?v=20260927-1426"></script>
+  <script src="./supabase-client.js?v=20260927-CSV1"></script>
+  <script src="./app.js?v=20260927-CSV1"></script>
   <script src="./auth.js?v=20260927-1426"></script>
 </body>
 </html>
