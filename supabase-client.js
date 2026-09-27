@@ -213,7 +213,7 @@
     };
   }
 
-  async function classifyTransaction(id, categoryNameValue, scope, rememberMerchant) {
+  async function classifyTransaction(id, categoryNameValue, scope, payer, rememberMerchant) {
     var categoryResult = await client.from("categories")
       .select("id").eq("name", categoryNameValue).limit(1);
     if (categoryResult.error) throw categoryResult.error;
@@ -221,7 +221,7 @@
     var categoryId = categoryResult.data[0] ? categoryResult.data[0].id : null;
 
     var updateResult = await client.from("transactions")
-      .update({ category_id: categoryId, scope: scope, status: "confirmed" })
+      .update({ category_id: categoryId, scope: scope, payer: payer, status: "confirmed" })
       .eq("id", id)
       .eq("is_demo", false);
     if (updateResult.error) throw updateResult.error;
