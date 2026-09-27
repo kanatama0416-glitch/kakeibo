@@ -15,32 +15,32 @@ button{cursor:pointer}
 .month-pill{border:1px solid var(--line);background:#fff;border-radius:999px;padding:9px 12px;font-weight:800;box-shadow:var(--shadow)}
 main{padding:8px 16px 26px}
 .screen{display:none}.screen.active{display:block}
-.settlement-card{border-radius:28px;padding:22px;color:#fff;background:linear-gradient(135deg,#1f7a5a,#285c72);box-shadow:0 16px 34px rgba(31,122,90,.2)}
+.settlement-card{border-radius:26px;padding:17px 18px;color:#fff;background:linear-gradient(135deg,#1f7a5a,#285c72);box-shadow:0 16px 34px rgba(31,122,90,.2)}
 .settlement-card p{margin:0;font-size:13px;opacity:.82}
 .settlement-card-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .settlement-card-head p{font-weight:900;opacity:1}
 .settlement-cycle{display:inline-flex;align-items:center;white-space:nowrap;border-radius:999px;padding:5px 8px;background:rgba(255,255,255,.16);font-size:10px;font-weight:900;letter-spacing:.03em}
-.settlement-timing{margin-top:5px!important;font-size:12px!important;opacity:.72!important}
-.settlement-amount-label{display:block;margin-top:16px;font-size:11px;font-weight:800;opacity:.72}
-.settlement-card h2{font-size:36px;letter-spacing:-.04em;margin:3px 0 5px}
-.settlement-direction{font-size:15px;font-weight:900;margin-top:4px}
-.settlement-note{margin-top:7px!important;line-height:1.5}
-.white-button{width:100%;margin-top:18px;border:0;border-radius:15px;padding:12px;background:#fff;color:#205f4a;font-weight:900}
-.payment-due-card{margin-bottom:12px;padding:18px;background:#fff;border:1px solid #dfe8e3;border-radius:24px;box-shadow:var(--shadow)}
+.settlement-timing{margin-top:3px!important;font-size:11px!important;opacity:.72!important}
+.settlement-amount-label{display:block;margin-top:10px;font-size:10px;font-weight:800;opacity:.72}
+.settlement-card h2{font-size:32px;letter-spacing:-.04em;margin:2px 0 3px}
+.settlement-direction{font-size:14px;font-weight:900;margin-top:2px}
+.settlement-note{margin-top:4px!important;line-height:1.35;font-size:12px!important}
+.white-button{width:100%;margin-top:12px;border:0;border-radius:14px;padding:10px;background:#fff;color:#205f4a;font-weight:900}
+.payment-due-card{margin-bottom:10px;padding:14px 16px;background:#fff;border:1px solid #dfe8e3;border-radius:22px;box-shadow:var(--shadow)}
 .payment-due-card.paid{background:#f3f9f6;border-color:#cfe4d9}
 .payment-due-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
-.payment-due-title{display:block;font-size:14px;font-weight:900}
-.payment-due-head small{display:block;margin-top:4px;color:var(--muted);font-size:11px;font-weight:800}
-.payment-status{display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;border-radius:999px;padding:6px 9px;font-size:10px;font-weight:900}
+.payment-due-title{display:block;font-size:13px;font-weight:900}
+.payment-due-head small{display:block;margin-top:2px;color:var(--muted);font-size:10px;font-weight:800}
+.payment-status{display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;border-radius:999px;padding:5px 8px;font-size:9px;font-weight:900}
 .payment-status.unpaid{background:#fff1df;color:#9a5c08}
 .payment-status.paid{background:var(--green-soft);color:var(--green)}
 .payment-status.none{background:#eef1f4;color:#6f7780}
-.payment-due-amount{display:block;margin-top:12px;font-size:34px;line-height:1;letter-spacing:-.04em}
-.payment-due-direction{margin:8px 0 0;font-size:14px;font-weight:900}
-.payment-due-meta{margin:5px 0 0;color:var(--muted);font-size:11px;line-height:1.5}
-.payment-paid-button{width:100%;margin-top:14px;border:0;border-radius:14px;padding:12px;background:var(--green);color:#fff;font-weight:900}
+.payment-due-amount{display:block;margin-top:8px;font-size:30px;line-height:1;letter-spacing:-.04em}
+.payment-due-direction{margin:5px 0 0;font-size:13px;font-weight:900}
+.payment-due-meta{margin:3px 0 0;color:var(--muted);font-size:10px;line-height:1.4}
+.payment-paid-button{width:100%;margin-top:10px;border:0;border-radius:13px;padding:9px;background:var(--green);color:#fff;font-weight:900}
 .payment-paid-button:disabled{opacity:.5;cursor:default}
-.payment-undo-button{width:100%;margin-top:8px;border:0;background:transparent;color:var(--muted);font-size:11px;font-weight:900;padding:7px}
+.payment-undo-button{width:100%;margin-top:5px;border:0;background:transparent;color:var(--muted);font-size:10px;font-weight:900;padding:5px}
 .metrics-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
 .metric-card,.split-card,.debt-card,.settings-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
 .metric-card{padding:16px}.metric-card.wide{margin-top:2px}
@@ -374,10 +374,10 @@ dialog{width:min(430px,calc(100% - 28px));border:0;border-radius:24px;padding:0;
 .home-coin-mascot{
   position:absolute;
   z-index:1;
-  width:92px;
+  width:80px;
   height:auto;
-  right:18px;
-  top:82px;
+  right:16px;
+  top:70px;
   opacity:.96
 }
 .settlement-card .settlement-amount-label,
@@ -386,7 +386,7 @@ dialog{width:min(430px,calc(100% - 28px));border:0;border-radius:24px;padding:0;
 .settlement-card .settlement-note{
   position:relative;
   z-index:2;
-  max-width:calc(100% - 92px)
+  max-width:calc(100% - 80px)
 }
 .settlement-card .white-button{
   position:relative;
@@ -437,11 +437,11 @@ dialog{width:min(430px,calc(100% - 28px));border:0;border-radius:24px;padding:0;
   top:-4px
 }
 @media(max-width:370px){
-  .home-coin-mascot{width:78px;right:12px;top:88px}
+  .home-coin-mascot{width:70px;right:10px;top:74px}
   .settlement-card .settlement-amount-label,
   .settlement-card h2,
   .settlement-card .settlement-direction,
-  .settlement-card .settlement-note{max-width:calc(100% - 78px)}
+  .settlement-card .settlement-note{max-width:calc(100% - 70px)}
   .csv-import-mascot-wrap .csv-import-open{padding-right:88px}
   .receipt-runner-mascot{width:72px;right:8px}
   .analysis-summary-card{padding-right:100px}
