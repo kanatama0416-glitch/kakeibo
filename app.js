@@ -1416,6 +1416,15 @@
     document.getElementById("initialExpenseTotal").textContent = yen(initialTotal);
     document.getElementById("initialExpenseSplit").textContent =
       "にゃち " + yen(initialMe) + " / うー " + yen(initialPartner);
+
+    var initialDirection = "返済なし";
+    if (Number(summary.plan.original_amount || 0) > 0) {
+      var lenderName = summary.plan.lender === "me" ? "にゃち" : "うー";
+      var borrowerName = summary.plan.borrower === "me" ? "にゃち" : "うー";
+      initialDirection = "返済：" + borrowerName + " → " + lenderName;
+    }
+    document.getElementById("initialExpenseDirection").textContent = initialDirection;
+
     document.getElementById("initialExpensesList").innerHTML =
       initialExpenses.map(function (x) {
         var detail = shortDate(x.date) + " ・ " +
