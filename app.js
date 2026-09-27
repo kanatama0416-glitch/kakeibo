@@ -16,6 +16,19 @@
     return Number(parts[1]) + "月";
   }
 
+  function fullMonthLabel(monthKey) {
+    var parts = monthKey.split("-");
+    return Number(parts[0]) + "年" + Number(parts[1]) + "月";
+  }
+
+  function monthPeriodLabel(monthKey) {
+    var parts = monthKey.split("-");
+    var year = Number(parts[0]);
+    var month = Number(parts[1]);
+    var lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    return month + "/1〜" + month + "/" + lastDay;
+  }
+
   function defaultMonthKey() {
     var now = new Date();
     var local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
@@ -1340,7 +1353,7 @@
     var empty = document.getElementById("homeCategoryEmpty");
     var title = document.getElementById("usageTitle");
 
-    title.textContent = monthLabel(state.currentMonth) + "の使い道";
+    title.textContent = monthLabel(state.currentMonth) + "分の使い道";
 
     if (!entries.length) {
       container.innerHTML = "";
@@ -1520,11 +1533,16 @@
     var summary = calculateSummary();
 
     var selectedMonthLabel = monthLabel(state.currentMonth);
-    document.getElementById("settlementTitle").textContent = selectedMonthLabel + "の最終精算";
-    document.getElementById("monthlyTotalTitle").textContent = selectedMonthLabel + "の生活費";
-    document.getElementById("monthlyRepaymentTitle").textContent = selectedMonthLabel + "の返済";
-    document.getElementById("monthlyShareTitle").textContent = selectedMonthLabel + "の負担";
-    document.getElementById("monthlySpendingTitle").textContent = selectedMonthLabel + "の支出";
+    var settlementMonth = addMonths(state.currentMonth, 1);
+    document.getElementById("settlementTitle").textContent = selectedMonthLabel + "分の精算";
+    document.getElementById("settlementTiming").textContent =
+      fullMonthLabel(settlementMonth) + "末に確定・精算";
+    document.getElementById("settlementNote").textContent =
+      monthPeriodLabel(state.currentMonth) + "に使った共同支出・返済・繰越を集計しています。";
+    document.getElementById("monthlyTotalTitle").textContent = selectedMonthLabel + "分の生活費";
+    document.getElementById("monthlyRepaymentTitle").textContent = selectedMonthLabel + "分の返済";
+    document.getElementById("monthlyShareTitle").textContent = selectedMonthLabel + "分の負担";
+    document.getElementById("monthlySpendingTitle").textContent = selectedMonthLabel + "分の支出";
 
     document.getElementById("monthlyTotal").textContent = yen(summary.total);
     document.getElementById("myShare").textContent = yen(summary.myShare);
@@ -1532,7 +1550,7 @@
     document.getElementById("monthlyRepayment").textContent = yen(summary.plan.monthly_amount);
     document.getElementById("remainingDebt").textContent = "残り " + yen(summary.plan.remaining_amount);
     document.getElementById("debtRemaining").textContent = yen(summary.plan.remaining_amount);
-    document.getElementById("repaymentBadge").textContent = selectedMonthLabel + " " + yen(summary.plan.monthly_amount);
+    document.getElementById("repaymentBadge").textContent = selectedMonthLabel + "分 " + yen(summary.plan.monthly_amount);
     document.getElementById("debtMeta").textContent =
       "総額 " + yen(summary.plan.original_amount) + " ・ 返済済 " +
       yen(summary.plan.original_amount - summary.plan.remaining_amount);
@@ -1890,7 +1908,7 @@
     for (var i = 0; i < 60; i += 1) {
       var key = addMonths(OPERATION_START_MONTH, i);
       options.push('<option value="' + key + '">' +
-        key.split("-")[0] + "年" + Number(key.split("-")[1]) + "月</option>");
+        key.split("-")[0] + "年" + Number(key.split("-")[1]) + "月分</option>");
     }
     select.innerHTML = options.join("");
     select.value = state.currentMonth;
