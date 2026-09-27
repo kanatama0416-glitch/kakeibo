@@ -139,7 +139,8 @@ dialog{width:min(430px,calc(100% - 28px));border:0;border-radius:24px;padding:0;
 .stack-total{height:28px;font-size:9px;font-weight:900;color:#626b75;white-space:nowrap;display:flex;align-items:center}
 .stack-column-wrap{height:190px;width:100%;display:flex;align-items:flex-end;justify-content:center;border-bottom:1px solid var(--line)}
 .stack-column{width:min(46px,70%);min-height:0;border-radius:10px 10px 4px 4px;overflow:hidden;display:flex;flex-direction:column-reverse;box-shadow:0 2px 8px rgba(31,40,48,.07)}
-.stack-segment{display:block;width:100%;min-height:2px}
+.stack-segment{display:flex;width:100%;min-height:2px;align-items:center;justify-content:center;overflow:hidden}
+.stack-segment-value{display:block;max-width:100%;padding:0 2px;color:#fff;font-size:8px;line-height:1;font-weight:900;white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,.28);transform:scale(.92);transform-origin:center}
 .stack-month-label{font-size:11px;color:var(--muted);font-weight:900;margin-top:8px}
 .chart-legend{display:flex;flex-wrap:wrap;gap:8px 12px;margin:12px 4px 0}
 .chart-legend span{display:inline-flex;align-items:center;gap:5px;font-size:10px;color:#626b75;font-weight:800}
