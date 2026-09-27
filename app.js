@@ -1470,23 +1470,26 @@
     }).join("");
   }
 
-  function carryInAmount(category) {
+  function carryInAmount(category, monthKey) {
+    var targetMonth = monthKey || state.currentMonth;
     return (state.data.carryovers || []).filter(function (x) {
-      return x.category === category && monthKeyFromDate(x.to_month) === state.currentMonth;
+      return x.category === category && monthKeyFromDate(x.to_month) === targetMonth;
     }).reduce(function (sum, x) {
       return sum + Number(x.amount || 0);
     }, 0);
   }
 
-  function carryOutRecord(category) {
+  function carryOutRecord(category, monthKey) {
+    var targetMonth = monthKey || state.currentMonth;
     return (state.data.carryovers || []).find(function (x) {
-      return x.category === category && monthKeyFromDate(x.from_month) === state.currentMonth;
+      return x.category === category && monthKeyFromDate(x.from_month) === targetMonth;
     }) || null;
   }
 
-  function calculateSummary() {
+  function calculateSummary(monthKey) {
+    var targetMonth = monthKey || state.currentMonth;
     var monthTransactions = state.data.transactions.filter(function (t) {
-      return monthKeyFromDate(t.date) === state.currentMonth;
+      return monthKeyFromDate(t.date) === targetMonth;
     });
     var shared = monthTransactions.filter(function (t) {
       return t.scope === "shared" && t.status === "confirmed";
@@ -1503,19 +1506,19 @@
 
     // Positive = うー owes にゃち. Negative = にゃち owes うー.
     var livingCurrent = paidByMe - myShare;
-    var carryInLiving = carryInAmount("living");
+    var carryInLiving = carryInAmount("living", targetMonth);
     var livingSettlement = livingCurrent + carryInLiving;
-    var livingCarryOutRecord = carryOutRecord("living");
+    var livingCarryOutRecord = carryOutRecord("living", targetMonth);
     var livingCarryOut = livingCarryOutRecord ? Number(livingCarryOutRecord.amount || 0) : 0;
     var livingPayNow = livingSettlement - livingCarryOut;
 
     var monthLoans = state.data.loans.filter(function (x) {
-      return monthKeyFromDate(x.date) === state.currentMonth && x.status === "open";
+      return monthKeyFromDate(x.date) === targetMonth && x.status === "open";
     });
     var loanCurrent = monthLoans.reduce(function (sum, x) {
       return sum + (x.lender === "me" ? Number(x.amount) : -Number(x.amount));
     }, 0);
-    var carryInLoan = carryInAmount("loan");
+    var carryInLoan = carryInAmount("loan", targetMonth);
     var loanNet = loanCurrent + carryInLoan;
 
     var plan = state.data.repayment_plan || {
@@ -1525,6 +1528,7 @@
     var finalSettlement = livingPayNow + repaymentNet;
 
     return {
+      month:targetMonth,
       total:total,
       myShare:myShare,
       partnerShare:partnerShare,
@@ -1550,12 +1554,88 @@
     return amount >= 0 ? "うー → にゃちへ支払い" : "にゃち → うーへ支払い";
   }
 
+  function paidSettlementRecord(monthKey) {
+    return (state.data.settlements || []).find(function (x) {
+      return monthKeyFromDate(x.settlement_month) === monthKey;
+    }) || null;
+  }
+
+  function paidDateLabel(value) {
+    if (!value) return "支払い済み";
+    var date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return "支払い済み";
+    return date.toLocaleDateString("ja-JP", {
+      month:"numeric",
+      day:"numeric",
+      timeZone:"Asia/Tokyo"
+    }) + "に支払い済み";
+  }
+
+  function renderPaymentDueCard() {
+    var paymentMonth = state.currentMonth;
+    var sourceMonth = addMonths(paymentMonth, -1);
+    var paidRecord = paidSettlementRecord(sourceMonth);
+    var hasSourceMonth = sourceMonth >= earliestAvailableMonth() || !!paidRecord;
+    var sourceSummary = hasSourceMonth ? calculateSummary(sourceMonth) : null;
+    var amount = paidRecord
+      ? Number(paidRecord.amount || 0)
+      : (sourceSummary ? Number(sourceSummary.finalSettlement || 0) : 0);
+    var isPaid = !!paidRecord;
+
+    var card = document.getElementById("paymentDueCard");
+    var status = document.getElementById("paymentDueStatus");
+    var payButton = document.getElementById("payCurrentSettlementButton");
+    var undoButton = document.getElementById("undoPaymentButton");
+
+    document.getElementById("paymentDueTitle").textContent = monthLabel(paymentMonth) + "に払う額";
+    document.getElementById("paymentDueSource").textContent = monthLabel(sourceMonth) + "分の精算";
+    document.getElementById("paymentDueAmount").textContent = yen(Math.abs(amount));
+
+    card.classList.toggle("paid", isPaid);
+    status.classList.remove("unpaid", "paid", "none");
+
+    if (!hasSourceMonth || amount === 0) {
+      status.classList.add("none");
+      status.textContent = "支払いなし";
+      document.getElementById("paymentDueDirection").textContent =
+        hasSourceMonth ? "精算する差額はありません" : monthLabel(sourceMonth) + "分の精算はありません";
+      document.getElementById("paymentDueMeta").textContent =
+        hasSourceMonth ? "この月に支払う精算額は0円です。" : "前月分の利用データはありません。";
+      payButton.classList.add("hidden");
+      undoButton.classList.add("hidden");
+      return;
+    }
+
+    document.getElementById("paymentDueDirection").textContent = directionText(amount);
+
+    if (isPaid) {
+      status.classList.add("paid");
+      status.textContent = "支払済み";
+      document.getElementById("paymentDueMeta").textContent = paidDateLabel(paidRecord.paid_at);
+      payButton.classList.remove("hidden");
+      payButton.disabled = true;
+      payButton.textContent = "支払済み ✓";
+      undoButton.classList.remove("hidden");
+    } else {
+      status.classList.add("unpaid");
+      status.textContent = "未払い";
+      document.getElementById("paymentDueMeta").textContent =
+        monthLabel(sourceMonth) + "分を" + monthLabel(paymentMonth) + "末に精算します。";
+      payButton.classList.remove("hidden");
+      payButton.disabled = false;
+      payButton.textContent = "払ったよー";
+      undoButton.classList.add("hidden");
+    }
+  }
+
   function render() {
     var summary = calculateSummary();
 
     var selectedMonthLabel = monthLabel(state.currentMonth);
     var settlementMonth = addMonths(state.currentMonth, 1);
-    document.getElementById("settlementTitle").textContent = selectedMonthLabel + "分の精算";
+    renderPaymentDueCard();
+    document.getElementById("settlementTitle").textContent = selectedMonthLabel + "分の精算見込み";
+    document.getElementById("breakdownTitle").textContent = selectedMonthLabel + "分の精算内訳";
     document.getElementById("settlementTiming").textContent =
       fullMonthLabel(settlementMonth) + "末に確定・精算";
     document.getElementById("settlementNote").textContent =
@@ -2315,6 +2395,57 @@
     state.currentMonth = event.target.value;
     setDefaultEntryDates(true);
     render();
+  });
+
+  document.getElementById("payCurrentSettlementButton").addEventListener("click", async function () {
+    var sourceMonth = addMonths(state.currentMonth, -1);
+    if (sourceMonth < earliestAvailableMonth()) return;
+    if (paidSettlementRecord(sourceMonth)) return;
+
+    var summary = calculateSummary(sourceMonth);
+    var amount = Number(summary.finalSettlement || 0);
+    if (!amount) return;
+
+    var ok = window.confirm(
+      monthLabel(sourceMonth) + "分 " + yen(Math.abs(amount)) + "\n" +
+      directionText(amount) + "\n\n支払い済みにしますか？"
+    );
+    if (!ok) return;
+
+    var button = document.getElementById("payCurrentSettlementButton");
+    button.disabled = true;
+    button.textContent = "保存しています…";
+
+    try {
+      await window.kakeiboDb.savePaidSettlement(sourceMonth, amount);
+      state.data = await window.kakeiboDb.getInitialData();
+      render();
+    } catch (e) {
+      console.error(e);
+      button.disabled = false;
+      button.textContent = "払ったよー";
+      alert("支払い済みにできませんでした。");
+    }
+  });
+
+  document.getElementById("undoPaymentButton").addEventListener("click", async function () {
+    var sourceMonth = addMonths(state.currentMonth, -1);
+    var record = paidSettlementRecord(sourceMonth);
+    if (!record) return;
+
+    var ok = window.confirm(
+      monthLabel(sourceMonth) + "分の支払い済み記録を取り消しますか？"
+    );
+    if (!ok) return;
+
+    try {
+      await window.kakeiboDb.deletePaidSettlement(sourceMonth);
+      state.data = await window.kakeiboDb.getInitialData();
+      render();
+    } catch (e) {
+      console.error(e);
+      alert("支払い済み記録を取り消せませんでした。");
+    }
   });
 
   document.getElementById("livingCarryoverInput").addEventListener("input", function (event) {
