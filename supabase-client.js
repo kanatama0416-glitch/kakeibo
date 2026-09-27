@@ -185,6 +185,14 @@
     }
   }
 
+  async function deleteTransaction(id) {
+    var result = await client.from("transactions")
+      .delete()
+      .eq("id", id)
+      .eq("is_demo", false);
+    if (result.error) throw result.error;
+  }
+
   async function addLoan(loan) {
     var borrower = loan.lender === "me" ? "partner" : "me";
     var result = await client.from("loans").insert({
@@ -349,6 +357,7 @@
     checkAccess: checkAccess,
     getInitialData: getInitialData,
     classifyTransaction: classifyTransaction,
+    deleteTransaction: deleteTransaction,
     addLoan: addLoan,
     addManualTransaction: addManualTransaction,
     addInitialExpense: addInitialExpense,
