@@ -356,10 +356,13 @@
   </dialog>
 
   <dialog id="classifyDialog">
-    <form method="dialog" class="dialog-card" id="classifyForm">
+    <form class="dialog-card" id="classifyForm">
       <div class="dialog-head"><h3 id="classifyTitle">明細を分類</h3><button type="button" data-close-dialog>×</button></div>
       <input type="hidden" id="classifyId">
-      <label>費目<select id="classifyCategory"></select></label>
+      <label>日付<input id="classifyDate" type="date" required></label>
+      <label>店舗・内容<input id="classifyMerchantName" type="text" required></label>
+      <label>金額<input id="classifyAmount" type="number" step="1" required></label>
+      <label>費目<select id="classifyCategory" required></select></label>
       <label>支出区分
         <select id="classifyScope">
           <option value="shared">共同生活費</option>
@@ -373,6 +376,7 @@
           <option value="partner">うー</option>
         </select>
       </label>
+      <label>メモ<input id="classifyMemo" type="text" placeholder="任意"></label>
       <label>この設定
         <select id="ruleMode">
           <option value="once">今回だけ</option>
@@ -385,11 +389,11 @@
   </dialog>
 
   <dialog id="manualExpenseDialog">
-    <form method="dialog" class="dialog-card" id="manualExpenseForm">
+    <form class="dialog-card" id="manualExpenseForm">
       <div class="dialog-head"><h3>支出を追加</h3><button type="button" data-close-dialog>×</button></div>
       <label>日付<input id="manualExpenseDate" type="date" required></label>
       <label>店舗・内容<input id="manualExpenseName" type="text" placeholder="例：アルビス / 電気代" required></label>
-      <label>金額<input id="manualExpenseAmount" type="number" min="0" step="1" placeholder="3000" required></label>
+      <label>金額<input id="manualExpenseAmount" type="number" step="1" placeholder="3000（返金は -1000）" required></label>
       <label>費目<select id="manualExpenseCategory" required></select></label>
       <label>支出区分
         <select id="manualExpenseScope">
@@ -410,7 +414,7 @@
   </dialog>
 
   <dialog id="initialExpenseDialog">
-    <form method="dialog" class="dialog-card" id="initialExpenseForm">
+    <form class="dialog-card" id="initialExpenseForm">
       <div class="dialog-head"><h3 id="initialExpenseDialogTitle">立替金を追加</h3><button type="button" data-close-dialog>×</button></div>
       <input id="initialExpenseId" type="hidden">
       <label>項目名<input id="initialExpenseItem" type="text" placeholder="例：家具代・引越し代" required></label>
@@ -494,6 +498,6 @@
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
   <script src="./supabase-client.js?v=20260927-PAYER1"></script>
   <script src="./app.js?v=20260927-PAYER1"></script>
-  <script src="./auth.js?v=20260927-1426"></script>
+  <script src="./auth.js?v=20260927-INTEGRITY1"></script>
 </body>
 </html>
