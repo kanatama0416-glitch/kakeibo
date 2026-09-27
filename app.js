@@ -1219,38 +1219,8 @@
     }
     document.getElementById("allTransactions").innerHTML = filtered.map(txRow).join("");
 
-    document.getElementById("loanBalance").textContent =
-      summary.loanNet === 0
-        ? "¥0"
-        : (summary.loanNet > 0 ? "うー → にゃち " : "にゃち → うー ") +
-          yen(Math.abs(summary.loanNet));
-    document.getElementById("loanBalanceNote").textContent =
-      summary.loanNet === 0
-        ? "未精算の立替はありません"
-        : "未精算の立替と前月からの繰越を含む差額";
-
-    var loanRows = [];
-    if (summary.carryInLoan !== 0) {
-      loanRows.push(
-        '<div class="transaction-row"><div class="tx-icon">↪</div>' +
-        '<div class="tx-main"><strong>前月からの繰越</strong><small>' +
-        directionText(summary.carryInLoan).replace("へ支払い","") +
-        '</small></div><div class="tx-amount">' + yen(Math.abs(summary.carryInLoan)) + '</div></div>'
-      );
-    }
-    loanRows = loanRows.concat(summary.monthLoans.map(function (x) {
-      var detail = shortDate(x.date) + " ・ " +
-        (x.lender === "me" ? "にゃちが立替" : "うーが立替");
-      return '<div class="transaction-row"><div class="tx-icon">↔</div>' +
-        '<div class="tx-main"><strong>' + escapeHtml(x.description) + '</strong><small>' +
-        detail + '</small></div><div class="tx-amount">' + yen(x.amount) + '</div></div>';
-    }));
-    document.getElementById("loansList").innerHTML = loanRows.join("");
-    document.getElementById("loansEmpty").classList.toggle("hidden", loanRows.length > 0);
-
     var nextMonth = addMonths(state.currentMonth, 1);
     var livingOut = carryOutRecord("living");
-    var loanOut = carryOutRecord("loan");
 
     document.getElementById("livingCarryoverAmount").textContent =
       yen(Math.abs(summary.livingSettlement));
@@ -1259,20 +1229,10 @@
         ? "繰越する差額はありません"
         : directionText(summary.livingSettlement).replace("へ支払い","") +
           (summary.carryInLiving !== 0 ? " ・ 前月繰越含む" : "");
-    document.getElementById("loanCarryoverAmount").textContent =
-      yen(Math.abs(summary.loanNet));
-    document.getElementById("loanCarryoverMeta").textContent =
-      summary.loanNet === 0
-        ? "繰越する立替金はありません"
-        : directionText(summary.loanNet).replace("へ支払い","") +
-          (summary.carryInLoan !== 0 ? " ・ 前月繰越含む" : "");
 
     var livingButton = document.querySelector('[data-carryover="living"]');
-    var loanButton = document.querySelector('[data-carryover="loan"]');
     livingButton.disabled = summary.livingSettlement === 0;
-    loanButton.disabled = summary.loanNet === 0;
     livingButton.textContent = livingOut ? monthLabel(nextMonth) + "へ繰越額を更新" : monthLabel(nextMonth) + "へ繰越";
-    loanButton.textContent = loanOut ? monthLabel(nextMonth) + "へ繰越額を更新" : monthLabel(nextMonth) + "へ繰越";
 
     var initialExpenses = state.data.initial_expenses || [];
     var initialTotal = initialExpenses.reduce(function (sum, x) {

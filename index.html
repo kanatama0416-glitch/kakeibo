@@ -158,48 +158,17 @@
 
       <section class="screen money-screen" data-screen="money">
         <div class="page-heading money-page-heading">
-          <h2>貸借・返済</h2>
-          <p>生活費とは分けて、お金のやりとりを管理</p>
+          <h2>立替金・返済</h2>
+          <p>長く返済していく立替金と、月ごとの返済を管理</p>
         </div>
 
-        <article class="money-balance-card">
-          <span class="money-kicker">今月の貸し借り</span>
-          <strong id="loanBalance">¥0</strong>
-          <small id="loanBalanceNote">未精算の立替と前月からの繰越を含む差額</small>
-        </article>
-
-        <section class="money-panel money-loans-section">
+        <section class="money-panel money-repayment-panel">
           <div class="money-section-head">
             <div>
-              <h3>今月の立替</h3>
-              <p>ちょっとした立替・貸し借り</p>
+              <h3>返済状況</h3>
+              <p>立替金の残額と今月の返済額</p>
             </div>
           </div>
-          <div id="loansList" class="transaction-list"></div>
-          <p id="loansEmpty" class="money-empty">未精算の立替はありません</p>
-        </section>
-
-        <section class="money-panel">
-          <div class="money-section-head">
-            <div>
-              <h3>立替金</h3>
-              <p>家具・引越しなど、返済していく立替</p>
-            </div>
-          </div>
-
-          <div class="money-total-row">
-            <div>
-              <span>立替金の合計</span>
-              <small id="initialExpenseSplit">にゃち ¥0 / うー ¥0</small>
-            </div>
-            <strong id="initialExpenseTotal">¥0</strong>
-          </div>
-
-          <div id="initialExpensesList" class="transaction-list"></div>
-          <button class="soft-button money-add-button" type="button" data-open-initial-expense>立替金を追加</button>
-
-          <div class="money-divider"></div>
-          <h4 class="money-subtitle">返済状況</h4>
           <article class="debt-card money-debt-card">
             <div class="debt-top">
               <div><span>残り</span><strong id="debtRemaining">¥180,000</strong></div>
@@ -215,7 +184,7 @@
           <div class="money-section-head">
             <div>
               <h3>翌月への繰越</h3>
-              <p>今月精算しないものだけ、次の月へ送る</p>
+              <p>今月精算しない生活費の差額だけ、次の月へ送る</p>
             </div>
           </div>
           <div class="carryover-grid">
@@ -225,13 +194,27 @@
               <small id="livingCarryoverMeta">繰越なし</small>
               <button class="soft-button" type="button" data-carryover="living">翌月へ繰越</button>
             </article>
-            <article class="carryover-card">
-              <span>立替の差額</span>
-              <strong id="loanCarryoverAmount">¥0</strong>
-              <small id="loanCarryoverMeta">繰越なし</small>
-              <button class="soft-button" type="button" data-carryover="loan">翌月へ繰越</button>
-            </article>
           </div>
+        </section>
+
+        <section class="money-panel money-detail-panel">
+          <div class="money-section-head">
+            <div>
+              <h3>立替金の詳細</h3>
+              <p>家具・引越しなど、長く返済していく項目</p>
+            </div>
+          </div>
+
+          <div class="money-total-row">
+            <div>
+              <span>立替金の合計</span>
+              <small id="initialExpenseSplit">にゃち ¥0 / うー ¥0</small>
+            </div>
+            <strong id="initialExpenseTotal">¥0</strong>
+          </div>
+
+          <div id="initialExpensesList" class="transaction-list"></div>
+          <button class="soft-button money-add-button" type="button" data-open-initial-expense>立替金を追加</button>
         </section>
       </section>
 
@@ -257,7 +240,7 @@
       <button class="nav-item active" data-go="home"><span>⌂</span><small>ホーム</small></button>
       <button class="nav-item" data-go="transactions"><span>≡</span><small>明細</small></button>
       <button class="nav-item" data-go="analysis"><span>▥</span><small>分析</small></button>
-      <button class="nav-item" data-go="money"><span>↔</span><small>貸借・返済</small></button>
+      <button class="nav-item" data-go="money"><span>↔</span><small>立替・返済</small></button>
       <button class="nav-item" data-go="settings"><span>⚙</span><small>設定</small></button>
     </nav>
   </div>
