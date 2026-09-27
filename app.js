@@ -524,28 +524,52 @@
     var parsedRows = [];
     var dateLines = 0;
     var amountLines = 0;
-    var flexibleDate = /(20\d{2})\s*[\/\.\-]\s*(\d{1,2})\s*[\/\.\-]\s*(\d{1,2})/;
+    var itemCount = 0;
+
+    function parseDateFromLine(lineText) {
+      var compact = normalizeText(lineText)
+        .replace(/[\u200B-\u200D\uFEFF]/g, "")
+        .replace(/\s+/g, "");
+
+      var separated = compact.match(/(20\d{2})[\/\.\-](\d{1,2})[\/\.\-](\d{1,2})/);
+      if (separated) {
+        return parseCsvDate(separated[1] + "/" + separated[2] + "/" + separated[3]);
+      }
+
+      var digits = compact.replace(/[^0-9]/g, "");
+      var eight = digits.match(/(20\d{2})(\d{2})(\d{2})/);
+      if (eight) {
+        return parseCsvDate(eight[1] + "/" + eight[2] + "/" + eight[3]);
+      }
+
+      return null;
+    }
 
     (pages || []).forEach(function (page) {
-      var items = (page.items || []).slice().sort(function (a, b) {
-        if (Math.abs(Number(a.y || 0) - Number(b.y || 0)) > 8) {
-          return Number(b.y || 0) - Number(a.y || 0);
-        }
+      var items = (page.items || []).slice();
+      itemCount += items.length;
+
+      items.sort(function (a, b) {
+        var ay = Number(a.y || 0);
+        var by = Number(b.y || 0);
+        if (Math.abs(ay - by) > 10) return by - ay;
         return Number(a.x || 0) - Number(b.x || 0);
       });
 
       var lines = [];
       items.forEach(function (item) {
         var target = null;
-        for (var i = lines.length - 1; i >= 0; i -= 1) {
-          if (Math.abs(Number(lines[i].y || 0) - Number(item.y || 0)) <= 8) {
+        var y = Number(item.y || 0);
+
+        for (var i = 0; i < lines.length; i += 1) {
+          if (Math.abs(Number(lines[i].y || 0) - y) <= 10) {
             target = lines[i];
             break;
           }
-          if (Number(lines[i].y || 0) - Number(item.y || 0) > 14) break;
         }
+
         if (!target) {
-          target = { y:Number(item.y || 0), items:[] };
+          target = { y:y, items:[] };
           lines.push(target);
         }
         target.items.push(item);
@@ -556,17 +580,17 @@
           return Number(a.x || 0) - Number(b.x || 0);
         });
 
-        var lineText = normalizeText(line.items.map(function (item) {
-          return item.text;
-        }).join(" "));
-        var dateMatch = lineText.match(flexibleDate);
-        if (!dateMatch) return;
+        var lineText = line.items.map(function (item) {
+          return normalizeText(item.text);
+        }).join(" ");
 
+        var date = parseDateFromLine(lineText);
+        if (!date) return;
         dateLines += 1;
 
         var amountColumnItems = line.items.filter(function (item) {
           var x = Number(item.x || 0);
-          return x >= 270 && x <= 350;
+          return x >= 265 && x <= 355;
         });
 
         var amount = null;
@@ -578,10 +602,11 @@
         if (!amount && amountColumnItems.length) {
           var combinedAmount = normalizeText(amountColumnItems.map(function (item) {
             return item.text;
-          }).join(""));
-          if (!/[\/\.\-]/.test(combinedAmount)) {
-            amount = parsePdfAmountToken(combinedAmount);
-          }
+          }).join(""))
+            .replace(/[\u200B-\u200D\uFEFF]/g, "")
+            .replace(/\s+/g, "");
+
+          amount = parsePdfAmountToken(combinedAmount);
         }
 
         if (!amount) return;
@@ -589,7 +614,7 @@
 
         var merchantParts = line.items.filter(function (item) {
           var x = Number(item.x || 0);
-          return x >= 60 && x < 270;
+          return x >= 58 && x < 265;
         }).map(function (item) {
           return normalizeText(item.text);
         }).filter(function (text) {
@@ -609,11 +634,7 @@
           .replace(/\s{2,}/g, " ")
           .trim();
 
-        var date = parseCsvDate(
-          dateMatch[1] + "/" + dateMatch[2] + "/" + dateMatch[3]
-        );
-
-        if (!date || !merchant || merchant.length < 2) return;
+        if (!merchant || merchant.length < 2) return;
 
         parsedRows.push({
           date:date,
@@ -627,7 +648,8 @@
     return {
       rows:parsedRows,
       dateLines:dateLines,
-      amountLines:amountLines
+      amountLines:amountLines,
+      itemCount:itemCount
     };
   }
 
@@ -917,7 +939,8 @@
       if (!result.length) {
         throw new Error(
           "PDFの文字読み取りはできましたが、明細を判定できませんでした。" +
-          "（日付候補 " + rakutenPageResult.dateLines +
+          "（文字 " + rakutenPageResult.itemCount +
+          "個 / 日付候補 " + rakutenPageResult.dateLines +
           "件 / 金額行 " + rakutenPageResult.amountLines + "件）"
         );
       }
