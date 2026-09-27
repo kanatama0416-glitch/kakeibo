@@ -172,6 +172,29 @@
     }
   }
 
+  async function addManualTransaction(tx) {
+    var categoryResult = await client.from("categories")
+      .select("id").eq("name", tx.category_name).limit(1);
+    if (categoryResult.error) throw categoryResult.error;
+
+    var categoryId = categoryResult.data[0] ? categoryResult.data[0].id : null;
+    var result = await client.from("transactions").insert({
+      transaction_date: tx.date,
+      merchant_name: tx.merchant_name,
+      amount: tx.amount,
+      category_id: categoryId,
+      scope: tx.scope,
+      payer: tx.payer,
+      status: "confirmed",
+      source: "manual",
+      memo: tx.memo || null,
+      is_demo: false
+    }).select("id,transaction_date,merchant_name,amount,scope,payer,status,source,memo").single();
+
+    if (result.error) throw result.error;
+    return result.data;
+  }
+
   async function syncInitialExpenseRepaymentPlan() {
     var expenseResult = await client.from("initial_expenses")
       .select("amount,payer");
@@ -268,6 +291,7 @@
     checkAccess: checkAccess,
     getInitialData: getInitialData,
     classifyTransaction: classifyTransaction,
+    addManualTransaction: addManualTransaction,
     addInitialExpense: addInitialExpense,
     updateRepaymentAmount: updateRepaymentAmount
   };
