@@ -26,15 +26,45 @@
     return result.data.session;
   }
 
-  async function signInWithEmail(email) {
-    var redirectTo = window.location.origin + window.location.pathname;
-    var result = await client.auth.signInWithOtp({
+  async function getAccountStatus(email) {
+    var result = await client.rpc("kakeibo_account_status", { p_email: email });
+    if (result.error) throw result.error;
+    return result.data;
+  }
+
+  async function signInWithPassword(email, password) {
+    var result = await client.auth.signInWithPassword({
       email: email,
+      password: password
+    });
+    if (result.error) throw result.error;
+    return result.data;
+  }
+
+  async function signUpWithPassword(email, password) {
+    var redirectTo = window.location.origin + window.location.pathname;
+    var result = await client.auth.signUp({
+      email: email,
+      password: password,
       options: {
-        emailRedirectTo: redirectTo,
-        shouldCreateUser: true
+        emailRedirectTo: redirectTo
       }
     });
+    if (result.error) throw result.error;
+    return result.data;
+  }
+
+  async function sendPasswordReset(email) {
+    var redirectTo = window.location.origin + window.location.pathname;
+    var result = await client.auth.resetPasswordForEmail(email, {
+      redirectTo: redirectTo
+    });
+    if (result.error) throw result.error;
+    return result.data;
+  }
+
+  async function updatePassword(password) {
+    var result = await client.auth.updateUser({ password: password });
     if (result.error) throw result.error;
     return result.data;
   }
@@ -378,7 +408,11 @@
   window.kakeiboDb = {
     client: client,
     getSession: getSession,
-    signInWithEmail: signInWithEmail,
+    getAccountStatus: getAccountStatus,
+    signInWithPassword: signInWithPassword,
+    signUpWithPassword: signUpWithPassword,
+    sendPasswordReset: sendPasswordReset,
+    updatePassword: updatePassword,
     signOut: signOut,
     onAuthStateChange: onAuthStateChange,
     checkAccess: checkAccess,
