@@ -539,7 +539,7 @@
         });
 
         var amountItems = line.filter(function (item) {
-          return Number(item.x || 0) > Number(dateItem.x || 0) + 180;
+          return Number(item.x || 0) > 260;
         }).map(function (item) {
           return {
             x:Number(item.x || 0),
