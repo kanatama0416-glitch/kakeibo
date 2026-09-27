@@ -1,5 +1,35 @@
 (function () {
-  var state = { data: null, filter: "all", currentClassifyId: null, started: false };
+  var OPERATION_START_MONTH = "2026-10";
+
+  function monthKeyFromDate(value) {
+    return value ? String(value).slice(0, 7) : "";
+  }
+
+  function addMonths(monthKey, offset) {
+    var parts = monthKey.split("-");
+    var date = new Date(Date.UTC(Number(parts[0]), Number(parts[1]) - 1 + offset, 1));
+    return date.getUTCFullYear() + "-" + String(date.getUTCMonth() + 1).padStart(2, "0");
+  }
+
+  function monthLabel(monthKey) {
+    var parts = monthKey.split("-");
+    return Number(parts[1]) + "月";
+  }
+
+  function defaultMonthKey() {
+    var now = new Date();
+    var local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+    var key = local.toISOString().slice(0, 7);
+    return key < OPERATION_START_MONTH ? OPERATION_START_MONTH : key;
+  }
+
+  var state = {
+    data: null,
+    filter: "all",
+    currentClassifyId: null,
+    started: false,
+    currentMonth: defaultMonthKey()
+  };
 
   function yen(value) {
     return "¥" + Number(value || 0).toLocaleString("ja-JP");
@@ -34,9 +64,27 @@
       '<div class="tx-amount">' + yen(tx.amount) + '</div></div>';
   }
 
+  function carryInAmount(category) {
+    return (state.data.carryovers || []).filter(function (x) {
+      return x.category === category && monthKeyFromDate(x.to_month) === state.currentMonth;
+    }).reduce(function (sum, x) {
+      return sum + Number(x.amount || 0);
+    }, 0);
+  }
+
+  function carryOutRecord(category) {
+    return (state.data.carryovers || []).find(function (x) {
+      return x.category === category && monthKeyFromDate(x.from_month) === state.currentMonth;
+    }) || null;
+  }
+
   function calculateSummary() {
-    var txs = state.data.transactions;
-    var shared = txs.filter(function (t) { return t.scope === "shared" && t.status === "confirmed"; });
+    var monthTransactions = state.data.transactions.filter(function (t) {
+      return monthKeyFromDate(t.date) === state.currentMonth;
+    });
+    var shared = monthTransactions.filter(function (t) {
+      return t.scope === "shared" && t.status === "confirmed";
+    });
     var total = shared.reduce(function (s,t) { return s + Number(t.amount); }, 0);
     var myShare = Math.round(total / 2);
     var partnerShare = total - myShare;
@@ -46,13 +94,19 @@
     var paidByPartner = shared.filter(function (t) { return t.payer === "partner"; })
       .reduce(function (s,t) { return s + Number(t.amount); }, 0);
 
-    // Positive = partner owes me. Negative = I owe partner.
-    var livingSettlement = paidByMe - myShare;
+    // Positive = うー owes にゃち. Negative = にゃち owes うー.
+    var livingCurrent = paidByMe - myShare;
+    var carryInLiving = carryInAmount("living");
+    var livingSettlement = livingCurrent + carryInLiving;
 
-    var loanNet = state.data.loans.filter(function (x) { return x.status === "open"; })
-      .reduce(function (sum, x) {
-        return sum + (x.lender === "me" ? Number(x.amount) : -Number(x.amount));
-      }, 0);
+    var monthLoans = state.data.loans.filter(function (x) {
+      return monthKeyFromDate(x.date) === state.currentMonth && x.status === "open";
+    });
+    var loanCurrent = monthLoans.reduce(function (sum, x) {
+      return sum + (x.lender === "me" ? Number(x.amount) : -Number(x.amount));
+    }, 0);
+    var carryInLoan = carryInAmount("loan");
+    var loanNet = loanCurrent + carryInLoan;
 
     var plan = state.data.repayment_plan || {
       id:null, original_amount:0, remaining_amount:0, monthly_amount:0, lender:"me", borrower:"partner"
@@ -66,11 +120,17 @@
       partnerShare:partnerShare,
       paidByMe:paidByMe,
       paidByPartner:paidByPartner,
+      livingCurrent:livingCurrent,
+      carryInLiving:carryInLiving,
       livingSettlement:livingSettlement,
+      loanCurrent:loanCurrent,
+      carryInLoan:carryInLoan,
       loanNet:loanNet,
       repaymentNet:repaymentNet,
       finalSettlement:finalSettlement,
-      plan:plan
+      plan:plan,
+      monthTransactions:monthTransactions,
+      monthLoans:monthLoans
     };
   }
 
@@ -81,13 +141,20 @@
   function render() {
     var summary = calculateSummary();
 
+    var selectedMonthLabel = monthLabel(state.currentMonth);
+    document.getElementById("settlementTitle").textContent = selectedMonthLabel + "の最終精算";
+    document.getElementById("monthlyTotalTitle").textContent = selectedMonthLabel + "の生活費";
+    document.getElementById("monthlyRepaymentTitle").textContent = selectedMonthLabel + "の返済";
+    document.getElementById("monthlyShareTitle").textContent = selectedMonthLabel + "の負担";
+    document.getElementById("monthlySpendingTitle").textContent = selectedMonthLabel + "の支出";
+
     document.getElementById("monthlyTotal").textContent = yen(summary.total);
     document.getElementById("myShare").textContent = yen(summary.myShare);
     document.getElementById("partnerShare").textContent = yen(summary.partnerShare);
     document.getElementById("monthlyRepayment").textContent = yen(summary.plan.monthly_amount);
     document.getElementById("remainingDebt").textContent = "残り " + yen(summary.plan.remaining_amount);
     document.getElementById("debtRemaining").textContent = yen(summary.plan.remaining_amount);
-    document.getElementById("repaymentBadge").textContent = "今月 " + yen(summary.plan.monthly_amount);
+    document.getElementById("repaymentBadge").textContent = selectedMonthLabel + " " + yen(summary.plan.monthly_amount);
     document.getElementById("debtMeta").textContent =
       "総額 " + yen(summary.plan.original_amount) + " ・ 返済済 " +
       yen(summary.plan.original_amount - summary.plan.remaining_amount);
@@ -98,17 +165,17 @@
     document.getElementById("debtProgress").style.width =
       Math.max(0, Math.min(100, progress)) + "%";
 
-    var unknown = state.data.transactions.filter(function (t) {
+    var unknown = summary.monthTransactions.filter(function (t) {
       return t.status === "unclassified" || !t.category_name;
     });
     document.getElementById("unknownCountText").textContent =
       "未分類が" + unknown.length + "件あります";
 
-    var recent = state.data.transactions.slice()
+    var recent = summary.monthTransactions.slice()
       .sort(function (a,b) { return b.date.localeCompare(a.date); }).slice(0,5);
     document.getElementById("recentTransactions").innerHTML = recent.map(txRow).join("");
 
-    var filtered = state.data.transactions.slice()
+    var filtered = summary.monthTransactions.slice()
       .sort(function (a,b) { return b.date.localeCompare(a.date); });
     if (state.filter !== "all") {
       filtered = filtered.filter(function (t) { return t.scope === state.filter; });
@@ -128,14 +195,49 @@
       (summary.loanNet >= 0 ? "うー → にゃち " : "にゃち → うー ") +
       yen(Math.abs(summary.loanNet));
 
-    document.getElementById("loansList").innerHTML =
-      state.data.loans.filter(function (x) { return x.status === "open"; }).map(function (x) {
-        var detail = shortDate(x.date) + " ・ " +
-          (x.lender === "me" ? "にゃちが立替" : "うーが立替");
-        return '<div class="transaction-row"><div class="tx-icon">↔</div>' +
-          '<div class="tx-main"><strong>' + escapeHtml(x.description) + '</strong><small>' +
-          detail + '</small></div><div class="tx-amount">' + yen(x.amount) + '</div></div>';
-      }).join("");
+    var loanRows = [];
+    if (summary.carryInLoan !== 0) {
+      loanRows.push(
+        '<div class="transaction-row"><div class="tx-icon">↪</div>' +
+        '<div class="tx-main"><strong>前月からの繰越</strong><small>' +
+        directionText(summary.carryInLoan).replace("へ支払い","") +
+        '</small></div><div class="tx-amount">' + yen(Math.abs(summary.carryInLoan)) + '</div></div>'
+      );
+    }
+    loanRows = loanRows.concat(summary.monthLoans.map(function (x) {
+      var detail = shortDate(x.date) + " ・ " +
+        (x.lender === "me" ? "にゃちが立替" : "うーが立替");
+      return '<div class="transaction-row"><div class="tx-icon">↔</div>' +
+        '<div class="tx-main"><strong>' + escapeHtml(x.description) + '</strong><small>' +
+        detail + '</small></div><div class="tx-amount">' + yen(x.amount) + '</div></div>';
+    }));
+    document.getElementById("loansList").innerHTML = loanRows.join("");
+
+    var nextMonth = addMonths(state.currentMonth, 1);
+    var livingOut = carryOutRecord("living");
+    var loanOut = carryOutRecord("loan");
+
+    document.getElementById("livingCarryoverAmount").textContent =
+      yen(Math.abs(summary.livingSettlement));
+    document.getElementById("livingCarryoverMeta").textContent =
+      summary.livingSettlement === 0
+        ? "繰越する差額はありません"
+        : directionText(summary.livingSettlement).replace("へ支払い","") +
+          (summary.carryInLiving !== 0 ? " ・ 前月繰越含む" : "");
+    document.getElementById("loanCarryoverAmount").textContent =
+      yen(Math.abs(summary.loanNet));
+    document.getElementById("loanCarryoverMeta").textContent =
+      summary.loanNet === 0
+        ? "繰越する立替金はありません"
+        : directionText(summary.loanNet).replace("へ支払い","") +
+          (summary.carryInLoan !== 0 ? " ・ 前月繰越含む" : "");
+
+    var livingButton = document.querySelector('[data-carryover="living"]');
+    var loanButton = document.querySelector('[data-carryover="loan"]');
+    livingButton.disabled = summary.livingSettlement === 0;
+    loanButton.disabled = summary.loanNet === 0;
+    livingButton.textContent = livingOut ? monthLabel(nextMonth) + "へ繰越額を更新" : monthLabel(nextMonth) + "へ繰越";
+    loanButton.textContent = loanOut ? monthLabel(nextMonth) + "へ繰越額を更新" : monthLabel(nextMonth) + "へ繰越";
 
     var initialExpenses = state.data.initial_expenses || [];
     var initialTotal = initialExpenses.reduce(function (sum, x) {
@@ -224,6 +326,20 @@
     });
   }
 
+  function initMonthSelect() {
+    var select = document.getElementById("monthSelect");
+    if (!select) return;
+
+    var options = [];
+    for (var i = 0; i < 60; i += 1) {
+      var key = addMonths(OPERATION_START_MONTH, i);
+      options.push('<option value="' + key + '">' +
+        key.split("-")[0] + "年" + Number(key.split("-")[1]) + "月</option>");
+    }
+    select.innerHTML = options.join("");
+    select.value = state.currentMonth;
+  }
+
   function go(screen) {
     document.querySelectorAll(".screen").forEach(function (x) {
       x.classList.toggle("active", x.getAttribute("data-screen") === screen);
@@ -253,6 +369,40 @@
       if (currentDialog) currentDialog.close();
       var target = document.getElementById(button.getAttribute("data-switch-dialog"));
       if (target) target.showModal();
+    });
+  });
+
+  document.getElementById("monthSelect").addEventListener("change", function (event) {
+    state.currentMonth = event.target.value;
+    setDefaultEntryDates(true);
+    render();
+  });
+
+  document.querySelectorAll("[data-carryover]").forEach(function (button) {
+    button.addEventListener("click", async function () {
+      var category = button.getAttribute("data-carryover");
+      var summary = calculateSummary();
+      var amount = category === "living" ? summary.livingSettlement : summary.loanNet;
+      if (!amount) return;
+
+      var label = category === "living" ? "生活費の精算差額" : "立替金";
+      var nextMonth = addMonths(state.currentMonth, 1);
+      var ok = window.confirm(
+        monthLabel(state.currentMonth) + "の" + label + " " +
+        yen(Math.abs(amount)) + "（" +
+        directionText(amount).replace("へ支払い","") + "）を" +
+        monthLabel(nextMonth) + "へ繰り越しますか？"
+      );
+      if (!ok) return;
+
+      try {
+        await window.kakeiboDb.saveCarryover(category, state.currentMonth, amount);
+        state.data = await window.kakeiboDb.getInitialData();
+        render();
+      } catch (e) {
+        console.error(e);
+        alert("繰越を保存できませんでした。");
+      }
     });
   });
 
@@ -347,13 +497,18 @@
     }
   });
 
-  function setDefaultEntryDates() {
+  function setDefaultEntryDates(force) {
     var now = new Date();
     var local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
     var today = local.toISOString().slice(0, 10);
+    var actualMonth = today.slice(0, 7);
+    var defaultDate = actualMonth === state.currentMonth
+      ? today
+      : state.currentMonth + "-01";
+
     ["manualExpenseDate", "initialExpenseDate"].forEach(function (id) {
       var input = document.getElementById(id);
-      if (input && !input.value) input.value = today;
+      if (input && (force || !input.value)) input.value = defaultDate;
     });
   }
 
@@ -380,6 +535,7 @@
     state.started = true;
 
     try {
+      initMonthSelect();
       state.data = await window.kakeiboDb.getInitialData();
       setDefaultEntryDates();
       render();
@@ -395,6 +551,7 @@
     state.started = false;
     state.filter = "all";
     state.currentClassifyId = null;
+    state.currentMonth = defaultMonthKey();
   }
 
   window.KakeiboApp = {
