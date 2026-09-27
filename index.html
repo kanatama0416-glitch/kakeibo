@@ -394,23 +394,6 @@
     </form>
   </dialog>
 
-  <dialog id="loanDialog">
-    <form method="dialog" class="dialog-card" id="loanForm">
-      <div class="dialog-head"><h3>立替を追加</h3><button type="button" data-close-dialog>×</button></div>
-      <label>日付<input id="loanDate" type="date" required></label>
-      <label>内容<input id="loanDescription" type="text" placeholder="例：チケット代 / タクシー代" required></label>
-      <label>金額<input id="loanAmount" type="number" min="1" step="1" placeholder="3000" required></label>
-      <label>立て替えた人
-        <select id="loanLender">
-          <option value="me">にゃち</option>
-          <option value="partner">うー</option>
-        </select>
-      </label>
-      <label>メモ<input id="loanMemo" type="text" placeholder="任意"></label>
-      <button class="primary-button" value="save">保存する</button>
-    </form>
-  </dialog>
-
   <dialog id="initialExpenseDialog">
     <form method="dialog" class="dialog-card" id="initialExpenseForm">
       <div class="dialog-head"><h3 id="initialExpenseDialogTitle">立替金を追加</h3><button type="button" data-close-dialog>×</button></div>
