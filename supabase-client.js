@@ -265,7 +265,7 @@
     var current = (planResult.data || [])[0] || null;
     if (!current) {
       var insertPlan = await client.from("repayment_plans").insert({
-        title: "同棲初期費用",
+        title: "立替金",
         original_amount: originalAmount,
         remaining_amount: originalAmount,
         monthly_amount: 0,
@@ -310,6 +310,33 @@
 
     await syncInitialExpenseRepaymentPlan();
     return result.data;
+  }
+
+  async function updateInitialExpense(id, expense) {
+    var result = await client.from("initial_expenses")
+      .update({
+        expense_date: expense.date,
+        item_name: expense.item_name,
+        amount: expense.amount,
+        payer: expense.payer,
+        memo: expense.memo || null
+      })
+      .eq("id", id)
+      .select("id,expense_date,item_name,amount,payer,memo")
+      .single();
+    if (result.error) throw result.error;
+
+    await syncInitialExpenseRepaymentPlan();
+    return result.data;
+  }
+
+  async function deleteInitialExpense(id) {
+    var result = await client.from("initial_expenses")
+      .delete()
+      .eq("id", id);
+    if (result.error) throw result.error;
+
+    await syncInitialExpenseRepaymentPlan();
   }
 
   function nextMonthFirst(monthKey) {
@@ -361,6 +388,8 @@
     addLoan: addLoan,
     addManualTransaction: addManualTransaction,
     addInitialExpense: addInitialExpense,
+    updateInitialExpense: updateInitialExpense,
+    deleteInitialExpense: deleteInitialExpense,
     saveCarryover: saveCarryover,
     updateRepaymentAmount: updateRepaymentAmount
   };
