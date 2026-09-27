@@ -389,6 +389,13 @@
     });
   });
 
+  document.querySelectorAll("[data-close-dialog]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var dialog = button.closest("dialog");
+      if (dialog) dialog.close();
+    });
+  });
+
   document.querySelectorAll("[data-switch-dialog]").forEach(function (button) {
     button.addEventListener("click", function () {
       var currentDialog = button.closest("dialog");
