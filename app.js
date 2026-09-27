@@ -1,6 +1,6 @@
 (function () {
   var OPERATION_START_MONTH = "2026-10";
-  var REPAYMENT_START_MONTH = "2026-09";
+  var REPAYMENT_START_MONTH = "2026-10";
 
   function monthKeyFromDate(value) {
     return value ? String(value).slice(0, 7) : "";
@@ -30,31 +30,24 @@
     return month + "/1〜" + month + "/" + lastDay;
   }
 
-  function defaultMonthKey() {
+  function actualMonthKey() {
     var now = new Date();
     var local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
-    var key = local.toISOString().slice(0, 7);
+    return local.toISOString().slice(0, 7);
+  }
+
+  function maxSelectableMonth() {
+    var actual = actualMonthKey();
+    return actual < OPERATION_START_MONTH ? OPERATION_START_MONTH : actual;
+  }
+
+  function defaultMonthKey() {
+    var key = actualMonthKey();
     return key < OPERATION_START_MONTH ? OPERATION_START_MONTH : key;
   }
 
   function earliestAvailableMonth() {
-    var earliest = OPERATION_START_MONTH;
-    if (!state.data) return earliest;
-
-    var datedCollections = [
-      state.data.transactions || [],
-      state.data.initial_expenses || []
-    ];
-
-    datedCollections.forEach(function (items) {
-      items.forEach(function (item) {
-        var value = item.date || item.transaction_date || item.expense_date;
-        var key = monthKeyFromDate(value);
-        if (key && key < earliest) earliest = key;
-      });
-    });
-
-    return earliest;
+    return OPERATION_START_MONTH;
   }
 
   var state = {
@@ -68,7 +61,8 @@
   };
 
   function yen(value) {
-    return "¥" + Number(value || 0).toLocaleString("ja-JP");
+    var number = Number(value || 0);
+    return (number < 0 ? "-¥" : "¥") + Math.abs(number).toLocaleString("ja-JP");
   }
 
   function shortDate(value) {
@@ -94,6 +88,7 @@
 
   function iconFor(tx) {
     var map = { "食費":"🛒", "日用品":"🧴", "光熱費":"💡", "外食":"☕", "家具・家電":"🪑" };
+    if (tx.status === "refunded" || Number(tx.amount || 0) < 0) return "↩";
     return map[tx.category_name] || (tx.status === "unclassified" ? "?" : "•");
   }
 
@@ -423,9 +418,22 @@
       month = Number(full[2]);
       day = Number(full[3]);
     } else if (short) {
-      year = Number(state.currentMonth.split("-")[0]);
       month = Number(short[1]);
       day = Number(short[2]);
+      var ref = state.currentMonth || actualMonthKey();
+      var refParts = ref.split("-");
+      var refYear = Number(refParts[0]);
+      var refMonth = Number(refParts[1]);
+      var refTime = Date.UTC(refYear, refMonth - 1, 15);
+      var candidates = [refYear - 1, refYear, refYear + 1].map(function (candidateYear) {
+        return {
+          year:candidateYear,
+          distance:Math.abs(Date.UTC(candidateYear, month - 1, day) - refTime)
+        };
+      }).sort(function (a,b) {
+        return a.distance - b.distance;
+      });
+      year = candidates[0].year;
     } else {
       var digits = raw.replace(/\D/g, "");
       if (digits.length >= 8) {
@@ -450,12 +458,12 @@
   function parseCsvAmount(value) {
     var raw = normalizeText(value);
     if (!raw) return null;
-    var negative = /^-/.test(raw) || /^[▲△]/.test(raw) || /^\(.*\)$/.test(raw);
+    var negative = /^-/.test(raw) || /-$/.test(raw) || /^[▲△]/.test(raw) || /^\(.*\)$/.test(raw);
     var digits = raw.replace(/[^0-9]/g, "");
     if (!digits) return null;
     var amount = Number(digits);
-    if (!Number.isFinite(amount) || amount <= 0 || negative) return null;
-    return amount;
+    if (!Number.isFinite(amount) || amount === 0) return null;
+    return negative ? -amount : amount;
   }
 
   function dateDistanceInDays(a, b) {
@@ -514,7 +522,7 @@
   function csvMerchantRule(merchantName) {
     var key = normalizeMerchant(merchantName);
     return (state.data.merchant_rules || []).find(function (rule) {
-      return rule.mode === "auto" && normalizeMerchant(rule.merchant_name) === key;
+      return normalizeMerchant(rule.merchant_name) === key;
     }) || null;
   }
 
@@ -749,7 +757,7 @@
     if (!raw) return null;
     if (/[年月日/:]/.test(raw)) return null;
     if (/[%回]/.test(raw)) return null;
-    if (!/^[¥￥]?\s*[0-9][0-9,]*\s*円?$/.test(raw)) return null;
+    if (!/^(?:-|▲|△|\()?\s*[¥￥]?\s*[0-9][0-9,]*\s*円?\)?-?$/.test(raw)) return null;
     return parseCsvAmount(raw);
   }
 
@@ -766,7 +774,7 @@
   function parseEposPdfText(text) {
     var source = normalizeText(text).replace(/\s+/g, " ");
     var rows = [];
-    var pattern = /(?:^|\s)(\d{2})\s+(\d{2})\s+(\d{2})\s+(.{2,120}?)\s+([0-9][0-9,]*)\s+(?:１|1)回\s+(\d+)\s+([0-9][0-9,]*)(?=\s|$)/g;
+    var pattern = /(?:^|\s)(\d{2})\s+(\d{2})\s+(\d{2})\s+(.{2,120}?)\s+([▲△-]?[0-9][0-9,]*)\s+(?:１|1)回\s+(\d+)\s+([▲△-]?[0-9][0-9,]*)(?=\s|$)/g;
     var match;
 
     while ((match = pattern.exec(source)) !== null) {
@@ -775,12 +783,9 @@
       var day = Number(match[3]);
       if (month < 1 || month > 12 || day < 1 || day > 31) continue;
 
-      var merchant = cleanPdfMerchant(match[4])
-        .replace(/\s{2,}/g, " ")
-        .trim();
+      var merchant = cleanPdfMerchant(match[4]).replace(/\s{2,}/g, " ").trim();
       var amount = parsePdfAmountToken(match[5]);
-
-      if (!merchant || merchant.length < 2 || !amount) continue;
+      if (!merchant || merchant.length < 2 || amount == null) continue;
 
       var date = parseCsvDate(
         (2000 + year) + "/" +
@@ -796,7 +801,6 @@
         amount:amount
       });
     }
-
     return rows;
   }
 
@@ -1034,7 +1038,7 @@
   function parseRakutenPdfText(text) {
     var source = normalizeText(text).replace(/\s+/g, " ");
     var rows = [];
-    var pattern = /(20\d{2}[\/\.\-]\d{1,2}[\/\.\-]\d{1,2})\s+((?:(?!20\d{2}[\/\.\-]\d{1,2}[\/\.\-]\d{1,2}).){2,100}?)\s+(?:本人\*?|家族\*?)\s+(?:1回払い|一括払い|分割払い|リボ払い|ボーナス払い)\s+([0-9][0-9,]*)/g;
+    var pattern = /(20\d{2}[\/\.\-]\d{1,2}[\/\.\-]\d{1,2})\s+((?:(?!20\d{2}[\/\.\-]\d{1,2}[\/\.\-]\d{1,2}).){2,100}?)\s+(?:本人\*?|家族\*?)\s+(?:1回払い|一括払い|分割払い|リボ払い|ボーナス払い)\s+([▲△-]?[0-9][0-9,]*)/g;
     var match;
 
     while ((match = pattern.exec(source)) !== null) {
@@ -1045,7 +1049,7 @@
         .trim();
       var amount = parseCsvAmount(match[3]);
 
-      if (!date || !merchant || !amount) continue;
+      if (!date || !merchant || amount == null) continue;
       rows.push({
         date:date,
         merchant_name:merchant,
@@ -1053,7 +1057,6 @@
         amount:amount
       });
     }
-
     return rows;
   }
 
@@ -1204,37 +1207,46 @@
     if (cardCompany !== "rakuten" && cardCompany !== "epos") {
       throw new Error("カード会社を選んでください。");
     }
+
     var extracted = await extractPdfRows(buffer);
     var yearMatch = extracted.text.match(/(20\d{2})\s*年/);
-    var defaultYear = yearMatch
-      ? Number(yearMatch[1])
-      : Number(state.currentMonth.split("-")[0]);
+    var defaultYear = yearMatch ? Number(yearMatch[1]) : Number(state.currentMonth.split("-")[0]);
 
     var result = [];
     var ignored = 0;
     var seen = {};
 
-    var rakutenPageResult = parseRakutenPdfPages(extracted.pages);
-    var rakutenPageRows = rakutenPageResult.rows;
-    var rakutenTextRows = rakutenPageRows.length
-      ? rakutenPageRows
-      : parseRakutenPdfText(extracted.text);
-
     function appendParsedPdfRow(parsed) {
       if (!parsed) return;
 
       var rule = csvMerchantRule(parsed.merchant_name);
+      var autoRule = rule && rule.mode === "auto";
+      var confirmRule = rule && rule.mode === "confirm";
       var row = {
         date:parsed.date,
         merchant_name:parsed.merchant_name,
         merchant_raw:parsed.merchant_raw,
         amount:parsed.amount,
-        category_name:rule ? rule.category_name : null,
-        scope:rule ? rule.scope : "shared",
+        category_name:autoRule ? rule.category_name : null,
+        scope:autoRule ? rule.scope : null,
         selected:true,
         duplicate:false,
-        matchReason:""
+        disabled:false,
+        matchReason:confirmRule
+          ? "店舗ルールが「毎回確認」です。反映後に分類してください。"
+          : ""
       };
+
+      var rowMonth = monthKeyFromDate(row.date);
+      if (rowMonth < OPERATION_START_MONTH) {
+        row.selected = false;
+        row.disabled = true;
+        row.matchReason = monthLabel(OPERATION_START_MONTH) + "運用開始前の明細なので反映対象外です。";
+      } else if (paidSettlementRecord(rowMonth)) {
+        row.selected = false;
+        row.disabled = true;
+        row.matchReason = "この月は精算済みです。追加する場合は先に支払済み記録を取り消してください。";
+      }
 
       var key = row.date + "|" + row.amount + "|" + normalizeMerchant(row.merchant_name);
       var existing = findCsvExistingMatch(row);
@@ -1276,11 +1288,17 @@
         throw new Error("このPDFはエポスカードの明細です。カード会社を「エポスカード」に変更してください。");
       }
 
-      if (rakutenTextRows.length) {
-        rakutenTextRows.forEach(appendParsedPdfRow);
+      var rakutenPageResult = parseRakutenPdfPages(extracted.pages);
+      var rakutenRows = rakutenPageResult.rows.length
+        ? rakutenPageResult.rows
+        : parseRakutenPdfText(extracted.text);
+
+      if (rakutenRows.length) {
+        rakutenRows.forEach(appendParsedPdfRow);
       } else {
         extracted.rows.forEach(function (pdfRow) {
-          var parsed = parseRakutenPdfStatementRow(pdfRow) || parsePdfStatementRow(pdfRow, defaultYear);
+          var parsed = parseRakutenPdfStatementRow(pdfRow) ||
+            parsePdfStatementRow(pdfRow, defaultYear);
           if (!parsed) {
             if (pdfDateMatch(pdfRow.text)) ignored += 1;
             return;
@@ -1288,67 +1306,39 @@
           appendParsedPdfRow(parsed);
         });
       }
-    }
-
-    if (!result.length && cardCompany === "rakuten") {
-      if (onProgress) onProgress("画像PDFとして読み取りを試しています…");
-
-      var ocrExtracted = await extractPdfRowsWithOcr(buffer, onProgress);
-      var ocrYearMatch = ocrExtracted.text.match(/(20\d{2})\s*年/);
-      var ocrDefaultYear = ocrYearMatch
-        ? Number(ocrYearMatch[1])
-        : defaultYear;
-
-      ignored = 0;
-      seen = {};
-
-      var rakutenOcrRows = parseRakutenPdfText(ocrExtracted.text);
-      if (rakutenOcrRows.length) {
-        rakutenOcrRows.forEach(appendParsedPdfRow);
-      } else {
-        ocrExtracted.rows.forEach(function (pdfRow) {
-        var parsed = parseRakutenPdfStatementRow(pdfRow) || parsePdfStatementRow(pdfRow, ocrDefaultYear);
-        if (!parsed) {
-          if (pdfDateMatch(pdfRow.text)) ignored += 1;
-          return;
-        }
-
-        var key = parsed.date + "|" + parsed.amount + "|" + normalizeMerchant(parsed.merchant_name);
-        if (seen[key]) return;
-
-        var rule = csvMerchantRule(parsed.merchant_name);
-        var row = {
-          date:parsed.date,
-          merchant_name:parsed.merchant_name,
-          merchant_raw:parsed.merchant_raw,
-          amount:parsed.amount,
-          category_name:rule ? rule.category_name : null,
-          scope:rule ? rule.scope : "shared",
-          selected:true,
-          duplicate:false,
-          matchReason:""
-        };
-
-        var existing = findCsvExistingMatch(row);
-        if (existing) {
-          row.duplicate = true;
-          row.selected = false;
-          row.matchReason = existing.reason;
-        row.matchedTxs = existing.txs || [existing.tx];
-        }
-
-        seen[key] = true;
-        result.push(row);
-        });
-      }
 
       if (!result.length) {
-        throw new Error(
-          "PDFの文字読み取りはできましたが、明細を判定できませんでした。" +
-          "（文字 " + rakutenPageResult.itemCount +
-          "個 / 日付候補 " + rakutenPageResult.dateLines +
-          "件 / 金額行 " + rakutenPageResult.amountLines + "件）"
-        );
+        if (onProgress) onProgress("画像PDFとして読み取りを試しています…");
+
+        var ocrExtracted = await extractPdfRowsWithOcr(buffer, onProgress);
+        var ocrYearMatch = ocrExtracted.text.match(/(20\d{2})\s*年/);
+        var ocrDefaultYear = ocrYearMatch ? Number(ocrYearMatch[1]) : defaultYear;
+        ignored = 0;
+        seen = {};
+
+        var ocrTextRows = parseRakutenPdfText(ocrExtracted.text);
+        if (ocrTextRows.length) {
+          ocrTextRows.forEach(appendParsedPdfRow);
+        } else {
+          ocrExtracted.rows.forEach(function (pdfRow) {
+            var parsed = parseRakutenPdfStatementRow(pdfRow) ||
+              parsePdfStatementRow(pdfRow, ocrDefaultYear);
+            if (!parsed) {
+              if (pdfDateMatch(pdfRow.text)) ignored += 1;
+              return;
+            }
+            appendParsedPdfRow(parsed);
+          });
+        }
+
+        if (!result.length) {
+          throw new Error(
+            "PDFの文字読み取りはできましたが、明細を判定できませんでした。" +
+            "（文字 " + rakutenPageResult.itemCount +
+            "個 / 日付候補 " + rakutenPageResult.dateLines +
+            "件 / 金額行 " + rakutenPageResult.amountLines + "件）"
+          );
+        }
       }
     }
 
@@ -1371,23 +1361,39 @@
       var merchant = normalizeText(values[header.merchantIndex]);
       var amount = parseCsvAmount(values[header.amountIndex]);
 
-      if (!date || !merchant || !amount) {
+      if (!date || !merchant || amount == null) {
         ignored += 1;
         return;
       }
 
       var rule = csvMerchantRule(merchant);
+      var autoRule = rule && rule.mode === "auto";
+      var confirmRule = rule && rule.mode === "confirm";
       var row = {
         date:date,
         merchant_name:merchant,
         merchant_raw:merchant,
         amount:amount,
-        category_name:rule ? rule.category_name : null,
-        scope:rule ? rule.scope : "shared",
+        category_name:autoRule ? rule.category_name : null,
+        scope:autoRule ? rule.scope : null,
         selected:true,
         duplicate:false,
-        matchReason:""
+        disabled:false,
+        matchReason:confirmRule
+          ? "店舗ルールが「毎回確認」です。反映後に分類してください。"
+          : ""
       };
+
+      var rowMonth = monthKeyFromDate(row.date);
+      if (rowMonth < OPERATION_START_MONTH) {
+        row.selected = false;
+        row.disabled = true;
+        row.matchReason = monthLabel(OPERATION_START_MONTH) + "運用開始前の明細なので反映対象外です。";
+      } else if (paidSettlementRecord(rowMonth)) {
+        row.selected = false;
+        row.disabled = true;
+        row.matchReason = "この月は精算済みです。追加する場合は先に支払済み記録を取り消してください。";
+      }
 
       var csvKey = date + "|" + amount + "|" + normalizeMerchant(merchant);
       var existing = findCsvExistingMatch(row);
@@ -1433,10 +1439,15 @@
 
   function csvReviewRow(row, index) {
     var meta = shortDate(row.date) + " ・ " +
-      (row.category_name || "その他") + " ・ " + scopeLabel(row.scope);
-    return '<div class="csv-review-row' + (row.duplicate ? " duplicate" : "") + '">' +
+      (row.category_name || "未分類") + " ・ " +
+      (row.scope ? scopeLabel(row.scope) : "要確認");
+
+    return '<div class="csv-review-row' +
+      (row.duplicate ? " duplicate" : "") +
+      (row.disabled ? " disabled" : "") + '">' +
       '<input type="checkbox" data-csv-row="' + index + '" aria-label="この明細を反映する"' +
-      (row.selected ? " checked" : "") + '>' +
+      (row.selected ? " checked" : "") +
+      (row.disabled ? " disabled" : "") + '>' +
       '<div class="csv-review-main"><strong>' + escapeHtml(row.merchant_name) + '</strong>' +
       '<div class="csv-review-meta"><span>' + escapeHtml(meta) + '</span><b>' + yen(row.amount) + '</b></div>' +
       (row.matchReason ? '<div class="csv-match-reason">' + escapeHtml(row.matchReason) + '</div>' : '') +
@@ -1487,14 +1498,16 @@
       { id:"csvSelectDuplicateButton", duplicate:true }
     ].forEach(function (config) {
       var rows = state.csvRows.filter(function (row) {
-        return row.duplicate === config.duplicate;
+        return row.duplicate === config.duplicate && !row.disabled;
       });
       var button = document.getElementById(config.id);
+
       if (!rows.length) {
         button.disabled = true;
         button.textContent = "すべて選択";
         return;
       }
+
       button.disabled = false;
       var allSelected = rows.every(function (row) { return row.selected; });
       button.textContent = allSelected ? "すべて外す" : "すべて選択";
@@ -1503,7 +1516,7 @@
 
   function setCsvGroupSelection(duplicate, selected) {
     state.csvRows.forEach(function (row) {
-      if (row.duplicate === duplicate) row.selected = selected;
+      if (row.duplicate === duplicate && !row.disabled) row.selected = selected;
     });
     renderCsvReview();
   }
