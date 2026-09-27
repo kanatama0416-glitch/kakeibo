@@ -1220,8 +1220,14 @@
     document.getElementById("allTransactions").innerHTML = filtered.map(txRow).join("");
 
     document.getElementById("loanBalance").textContent =
-      (summary.loanNet >= 0 ? "うー → にゃち " : "にゃち → うー ") +
-      yen(Math.abs(summary.loanNet));
+      summary.loanNet === 0
+        ? "¥0"
+        : (summary.loanNet > 0 ? "うー → にゃち " : "にゃち → うー ") +
+          yen(Math.abs(summary.loanNet));
+    document.getElementById("loanBalanceNote").textContent =
+      summary.loanNet === 0
+        ? "未精算の立替はありません"
+        : "未精算の立替と前月からの繰越を含む差額";
 
     var loanRows = [];
     if (summary.carryInLoan !== 0) {
@@ -1240,6 +1246,7 @@
         detail + '</small></div><div class="tx-amount">' + yen(x.amount) + '</div></div>';
     }));
     document.getElementById("loansList").innerHTML = loanRows.join("");
+    document.getElementById("loansEmpty").classList.toggle("hidden", loanRows.length > 0);
 
     var nextMonth = addMonths(state.currentMonth, 1);
     var livingOut = carryOutRecord("living");

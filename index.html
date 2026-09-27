@@ -156,57 +156,83 @@
         <div id="analysisLegend" class="chart-legend"></div>
       </section>
 
-      <section class="screen" data-screen="money">
-        <div class="page-heading">
+      <section class="screen money-screen" data-screen="money">
+        <div class="page-heading money-page-heading">
           <h2>貸借・返済</h2>
           <p>生活費とは分けて、お金のやりとりを管理</p>
         </div>
 
-        <article class="metric-card wide">
-          <span>現在の貸し借り差額</span>
-          <strong id="loanBalance">うー → にゃち ¥6,500</strong>
-          <small>未精算の立替のみ</small>
+        <article class="money-balance-card">
+          <span class="money-kicker">今月の貸し借り</span>
+          <strong id="loanBalance">¥0</strong>
+          <small id="loanBalanceNote">未精算の立替と前月からの繰越を含む差額</small>
         </article>
 
-        <h3 class="section-title">未精算の立替</h3>
-        <div id="loansList" class="transaction-list"></div>
-
-        <h3 class="section-title">翌月への繰越</h3>
-        <p class="carryover-help">精算・返済がなかったときだけ、項目ごとに翌月へ送れます。</p>
-        <div class="carryover-grid">
-          <article class="carryover-card">
-            <span>生活費の精算差額</span>
-            <strong id="livingCarryoverAmount">¥0</strong>
-            <small id="livingCarryoverMeta">繰越なし</small>
-            <button class="soft-button" type="button" data-carryover="living">翌月へ繰越</button>
-          </article>
-          <article class="carryover-card">
-            <span>立替金</span>
-            <strong id="loanCarryoverAmount">¥0</strong>
-            <small id="loanCarryoverMeta">繰越なし</small>
-            <button class="soft-button" type="button" data-carryover="loan">翌月へ繰越</button>
-          </article>
-        </div>
-
-        <h3 class="section-title">立替金</h3>
-        <article class="metric-card wide">
-          <span>立替金の合計</span>
-          <strong id="initialExpenseTotal">¥0</strong>
-          <small id="initialExpenseSplit">にゃち ¥0 / うー ¥0</small>
-        </article>
-        <div id="initialExpensesList" class="transaction-list" style="margin-top:10px"></div>
-        <button class="soft-button" type="button" data-open-initial-expense style="margin-top:10px">立替金を追加</button>
-
-        <h3 class="section-title">立替金の返済</h3>
-        <article class="debt-card">
-          <div class="debt-top">
-            <div><span>残り</span><strong id="debtRemaining">¥180,000</strong></div>
-            <em id="repaymentBadge">今月 ¥20,000</em>
+        <section class="money-panel money-loans-section">
+          <div class="money-section-head">
+            <div>
+              <h3>今月の立替</h3>
+              <p>ちょっとした立替・貸し借り</p>
+            </div>
           </div>
-          <div class="progress"><span id="debtProgress"></span></div>
-          <p id="debtMeta">総額 ¥300,000 ・ 返済済 ¥120,000</p>
-          <button class="soft-button" type="button" data-open="repaymentDialog">返済額を変更</button>
-        </article>
+          <div id="loansList" class="transaction-list"></div>
+          <p id="loansEmpty" class="money-empty">未精算の立替はありません</p>
+        </section>
+
+        <section class="money-panel">
+          <div class="money-section-head">
+            <div>
+              <h3>立替金</h3>
+              <p>家具・引越しなど、返済していく立替</p>
+            </div>
+          </div>
+
+          <div class="money-total-row">
+            <div>
+              <span>立替金の合計</span>
+              <small id="initialExpenseSplit">にゃち ¥0 / うー ¥0</small>
+            </div>
+            <strong id="initialExpenseTotal">¥0</strong>
+          </div>
+
+          <div id="initialExpensesList" class="transaction-list"></div>
+          <button class="soft-button money-add-button" type="button" data-open-initial-expense>立替金を追加</button>
+
+          <div class="money-divider"></div>
+          <h4 class="money-subtitle">返済状況</h4>
+          <article class="debt-card money-debt-card">
+            <div class="debt-top">
+              <div><span>残り</span><strong id="debtRemaining">¥180,000</strong></div>
+              <em id="repaymentBadge">今月 ¥20,000</em>
+            </div>
+            <div class="progress"><span id="debtProgress"></span></div>
+            <p id="debtMeta">総額 ¥300,000 ・ 返済済 ¥120,000</p>
+            <button class="soft-button" type="button" data-open="repaymentDialog">返済額を変更</button>
+          </article>
+        </section>
+
+        <section class="money-panel money-carryover-panel">
+          <div class="money-section-head">
+            <div>
+              <h3>翌月への繰越</h3>
+              <p>今月精算しないものだけ、次の月へ送る</p>
+            </div>
+          </div>
+          <div class="carryover-grid">
+            <article class="carryover-card">
+              <span>生活費の精算差額</span>
+              <strong id="livingCarryoverAmount">¥0</strong>
+              <small id="livingCarryoverMeta">繰越なし</small>
+              <button class="soft-button" type="button" data-carryover="living">翌月へ繰越</button>
+            </article>
+            <article class="carryover-card">
+              <span>立替の差額</span>
+              <strong id="loanCarryoverAmount">¥0</strong>
+              <small id="loanCarryoverMeta">繰越なし</small>
+              <button class="soft-button" type="button" data-carryover="loan">翌月へ繰越</button>
+            </article>
+          </div>
+        </section>
       </section>
 
       <section class="screen" data-screen="settings">

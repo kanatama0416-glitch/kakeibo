@@ -174,3 +174,89 @@ dialog{width:min(430px,calc(100% - 28px));border:0;border-radius:24px;padding:0;
 .csv-match-reason{margin-top:5px;color:#8a6529;font-size:10px;line-height:1.45}
 .csv-empty{margin:0;padding:12px;border:1px dashed var(--line);border-radius:14px;color:var(--muted);font-size:11px;text-align:center}
 #csvImportButton:disabled{opacity:.45;cursor:default}
+
+/* money page cleanup 2026-09-27 */
+.money-screen{padding-bottom:8px}
+.money-page-heading{margin-bottom:14px}
+.money-balance-card{
+  background:linear-gradient(145deg,#ffffff 0%,#f2f8f5 100%);
+  border:1px solid #dfe9e4;
+  border-radius:24px;
+  padding:18px;
+  box-shadow:var(--shadow)
+}
+.money-balance-card .money-kicker{display:block;color:var(--muted);font-size:11px;font-weight:900;letter-spacing:.03em}
+.money-balance-card strong{display:block;margin-top:6px;font-size:28px;letter-spacing:-.035em}
+.money-balance-card small{display:block;margin-top:5px;color:var(--muted);font-size:11px;line-height:1.5}
+.money-panel{
+  margin-top:14px;
+  padding:16px;
+  background:#fff;
+  border:1px solid var(--line);
+  border-radius:22px;
+  box-shadow:var(--shadow)
+}
+.money-section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.money-section-head h3{margin:0;font-size:16px;letter-spacing:-.01em}
+.money-section-head p{margin:4px 0 0;color:var(--muted);font-size:11px;line-height:1.45}
+.money-panel .transaction-list{margin-top:12px}
+.money-panel .transaction-row{
+  border-color:#eef0f2;
+  background:#f8f9fa;
+  box-shadow:none
+}
+.money-empty{
+  margin:12px 0 0;
+  padding:13px 12px;
+  border-radius:15px;
+  background:#f7f8fa;
+  color:var(--muted);
+  font-size:11px;
+  text-align:center
+}
+.money-total-row{
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap:14px;
+  margin-top:14px;
+  padding:14px;
+  border-radius:17px;
+  background:#f7f8fa
+}
+.money-total-row span{display:block;color:var(--muted);font-size:11px;font-weight:900}
+.money-total-row small{display:block;margin-top:4px;color:var(--muted);font-size:10px}
+.money-total-row strong{font-size:22px;white-space:nowrap}
+.money-add-button{margin-top:10px}
+.money-divider{height:1px;margin:18px 0 14px;background:var(--line)}
+.money-subtitle{margin:0;color:var(--muted);font-size:11px;font-weight:900;letter-spacing:.04em}
+.money-debt-card{
+  margin-top:9px;
+  border:0;
+  background:#f7f8fa;
+  box-shadow:none
+}
+.money-carryover-panel{margin-bottom:4px}
+.money-screen .carryover-grid{
+  grid-template-columns:1fr;
+  gap:9px;
+  margin-top:12px
+}
+.money-screen .carryover-card{
+  padding:13px 14px;
+  border:0;
+  border-radius:17px;
+  background:#f7f8fa;
+  box-shadow:none
+}
+.money-screen .carryover-card span{font-size:11px}
+.money-screen .carryover-card strong{margin:4px 0 2px;font-size:20px}
+.money-screen .carryover-card small{
+  min-height:0;
+  margin:0 0 10px;
+  font-size:10px
+}
+.money-screen .carryover-card .soft-button{padding:10px;font-size:11px}
+@media(max-width:370px){
+  .money-total-row{align-items:flex-start;flex-direction:column;gap:8px}
+}
