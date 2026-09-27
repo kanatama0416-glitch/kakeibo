@@ -278,3 +278,10 @@ dialog{width:min(430px,calc(100% - 28px));border:0;border-radius:24px;padding:0;
 .carryover-input-wrap input{min-width:0;width:100%;border:0;outline:0;background:transparent;padding:10px 0;font-size:16px;font-weight:900;color:var(--text)}
 .carryover-input-wrap:focus-within{border-color:#97bea9;box-shadow:0 0 0 3px rgba(31,122,90,.08)}
 .carryover-input-wrap:has(input:disabled){opacity:.5}
+
+/* carryover settlement preview 2026-09-27 */
+.carryover-settlement-preview{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0 4px}
+.carryover-settlement-preview>div{padding:10px 11px;border-radius:13px;background:#fff;border:1px solid var(--line)}
+.carryover-settlement-preview span{display:block;color:var(--muted);font-size:10px;font-weight:900}
+.carryover-settlement-preview strong{display:block;margin-top:4px;font-size:16px;color:var(--text)}
+@media(max-width:350px){.carryover-settlement-preview{grid-template-columns:1fr}}

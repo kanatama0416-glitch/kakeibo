@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="./assets/app-icon-180.png?v=20260927-1438">
   <link rel="icon" type="image/png" href="./assets/app-icon-180.png?v=20260927-1438">
   <link rel="manifest" href="./manifest.webmanifest?v=20260927-1438">
-  <link rel="stylesheet" href="./styles.css?v=20260927-MASCOT1">
+  <link rel="stylesheet" href="./styles.css?v=20260927-CARRYOVER2">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -189,14 +189,20 @@
           </div>
           <div class="carryover-grid">
             <article class="carryover-card">
-              <span>生活費の精算差額</span>
+              <span id="livingCarryoverSourceLabel">今月の精算差額</span>
               <strong id="livingCarryoverAmount">¥0</strong>
               <small id="livingCarryoverMeta">繰越なし</small>
+
+              <div class="carryover-settlement-preview">
+                <div><span>今月支払う額</span><strong id="livingPayNowAmount">¥0</strong></div>
+                <div><span id="livingNextMonthLabel">翌月へ繰越</span><strong id="livingNextMonthAmount">¥0</strong></div>
+              </div>
+
               <label class="carryover-amount-label" for="livingCarryoverInput">
-                <span>繰越する金額</span>
+                <span>今月払わず、翌月へ回す金額</span>
                 <div class="carryover-input-wrap"><b>¥</b><input id="livingCarryoverInput" type="number" min="0" step="1" inputmode="numeric" value="0"></div>
               </label>
-              <button class="soft-button" type="button" data-carryover="living">翌月へ繰越</button>
+              <button class="soft-button" type="button" data-carryover="living">繰越額を保存</button>
             </article>
           </div>
         </section>
@@ -397,7 +403,7 @@
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
   <script src="./supabase-client.js?v=20260927-CSV2"></script>
-  <script src="./app.js?v=20260927-RAKUTENPDF5"></script>
+  <script src="./app.js?v=20260927-CARRYOVER2"></script>
   <script src="./auth.js?v=20260927-1426"></script>
 </body>
 </html>

@@ -1223,6 +1223,9 @@
     var livingCurrent = paidByMe - myShare;
     var carryInLiving = carryInAmount("living");
     var livingSettlement = livingCurrent + carryInLiving;
+    var livingCarryOutRecord = carryOutRecord("living");
+    var livingCarryOut = livingCarryOutRecord ? Number(livingCarryOutRecord.amount || 0) : 0;
+    var livingPayNow = livingSettlement - livingCarryOut;
 
     var monthLoans = state.data.loans.filter(function (x) {
       return monthKeyFromDate(x.date) === state.currentMonth && x.status === "open";
@@ -1237,7 +1240,7 @@
       id:null, original_amount:0, remaining_amount:0, monthly_amount:0, lender:"me", borrower:"partner"
     };
     var repaymentNet = plan.lender === "me" ? Number(plan.monthly_amount) : -Number(plan.monthly_amount);
-    var finalSettlement = livingSettlement + loanNet + repaymentNet;
+    var finalSettlement = livingPayNow + loanNet + repaymentNet;
 
     return {
       total:total,
@@ -1248,6 +1251,8 @@
       livingCurrent:livingCurrent,
       carryInLiving:carryInLiving,
       livingSettlement:livingSettlement,
+      livingCarryOut:livingCarryOut,
+      livingPayNow:livingPayNow,
       loanCurrent:loanCurrent,
       carryInLoan:carryInLoan,
       loanNet:loanNet,
@@ -1315,12 +1320,21 @@
     var livingButton = document.querySelector('[data-carryover="living"]');
     var livingInput = document.getElementById("livingCarryoverInput");
     var livingAvailable = Math.abs(summary.livingSettlement);
-    var livingPreset = livingOut ? Math.abs(Number(livingOut.amount || 0)) : livingAvailable;
+    var livingPreset = livingOut ? Math.abs(Number(livingOut.amount || 0)) : 0;
     livingInput.max = String(livingAvailable);
     livingInput.value = String(Math.min(livingAvailable, livingPreset));
     livingInput.disabled = livingAvailable === 0;
     livingButton.disabled = livingAvailable === 0;
-    livingButton.textContent = livingOut ? monthLabel(nextMonth) + "へ繰越額を更新" : monthLabel(nextMonth) + "へ繰越";
+
+    document.getElementById("livingCarryoverSourceLabel").textContent =
+      selectedMonthLabel + "の精算差額";
+    document.getElementById("livingNextMonthLabel").textContent =
+      monthLabel(nextMonth) + "へ繰越";
+    document.getElementById("livingPayNowAmount").textContent =
+      yen(Math.max(0, livingAvailable - Math.min(livingAvailable, livingPreset)));
+    document.getElementById("livingNextMonthAmount").textContent =
+      yen(Math.min(livingAvailable, livingPreset));
+    livingButton.textContent = livingOut ? "繰越額を更新" : "繰越額を保存";
 
     var initialExpenses = state.data.initial_expenses || [];
     var initialTotal = initialExpenses.reduce(function (sum, x) {
@@ -1627,6 +1641,16 @@
     render();
   });
 
+  document.getElementById("livingCarryoverInput").addEventListener("input", function (event) {
+    var summary = calculateSummary();
+    var available = Math.abs(summary.livingSettlement);
+    var selected = Number(event.target.value || 0);
+    if (!Number.isFinite(selected) || selected < 0) selected = 0;
+    selected = Math.min(available, selected);
+    document.getElementById("livingPayNowAmount").textContent = yen(available - selected);
+    document.getElementById("livingNextMonthAmount").textContent = yen(selected);
+  });
+
   document.querySelectorAll("[data-carryover]").forEach(function (button) {
     button.addEventListener("click", async function () {
       var category = button.getAttribute("data-carryover");
@@ -1653,11 +1677,12 @@
       var amount = baseAmount < 0 ? -selectedAmount : selectedAmount;
       var label = category === "living" ? "生活費の精算差額" : "立替金";
       var nextMonth = addMonths(state.currentMonth, 1);
+      var payNow = available - selectedAmount;
       var ok = window.confirm(
-        monthLabel(state.currentMonth) + "の" + label + "から " +
-        yen(selectedAmount) + "（" +
-        directionText(amount).replace("へ支払い","") + "）を" +
-        monthLabel(nextMonth) + "へ繰り越しますか？"
+        monthLabel(state.currentMonth) + "の" + label + " " + yen(available) + " のうち\n" +
+        "今月支払う：" + yen(payNow) + "\n" +
+        monthLabel(nextMonth) + "へ繰越：" + yen(selectedAmount) + "\n\n" +
+        "この内容で保存しますか？"
       );
       if (!ok) return;
 
