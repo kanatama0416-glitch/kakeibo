@@ -31,7 +31,7 @@
         <h1>ふたり家計</h1>
       </div>
       <div class="header-actions">
-        <button class="month-pill" type="button">2026年9月 ▾</button>
+        <select id="monthSelect" class="month-pill" aria-label="表示する月"></select>
         <button id="logoutButton" class="logout-button" type="button">ログアウト</button>
       </div>
     </header>
@@ -39,7 +39,7 @@
     <main>
       <section class="screen active" data-screen="home">
         <article class="settlement-card">
-          <p>今月の最終精算</p>
+          <p id="settlementTitle">10月の最終精算</p>
           <h2 id="settlementAmount">¥64,500</h2>
           <div class="settlement-direction" id="settlementDirection">うー → にゃちへ支払い</div>
           <p class="settlement-note">生活費・返済・立替をまとめた金額です。</p>
@@ -48,18 +48,18 @@
 
         <div class="metrics-grid">
           <article class="metric-card">
-            <span>今月の生活費</span>
+            <span id="monthlyTotalTitle">10月の生活費</span>
             <strong id="monthlyTotal">¥84,260</strong>
             <small>共同生活費のみ</small>
           </article>
           <article class="metric-card">
-            <span>今月の返済</span>
+            <span id="monthlyRepaymentTitle">10月の返済</span>
             <strong id="monthlyRepayment">¥20,000</strong>
             <small id="remainingDebt">残り ¥180,000</small>
           </article>
         </div>
 
-        <h3 class="section-title">今月の負担</h3>
+        <h3 class="section-title" id="monthlyShareTitle">10月の負担</h3>
         <article class="split-card">
           <div><span>にゃち</span><strong id="myShare">¥42,130</strong></div>
           <span class="swap">↔</span>
@@ -76,7 +76,7 @@
         </button>
 
         <div class="section-head">
-          <h3 class="section-title">今月の支出</h3>
+          <h3 class="section-title" id="monthlySpendingTitle">10月の支出</h3>
           <button type="button" class="text-button" data-go="transactions">すべて見る</button>
         </div>
         <div id="recentTransactions" class="transaction-list"></div>
@@ -119,6 +119,23 @@
 
         <h3 class="section-title">未精算の立替</h3>
         <div id="loansList" class="transaction-list"></div>
+
+        <h3 class="section-title">翌月への繰越</h3>
+        <p class="carryover-help">精算・返済がなかったときだけ、項目ごとに翌月へ送れます。</p>
+        <div class="carryover-grid">
+          <article class="carryover-card">
+            <span>生活費の精算差額</span>
+            <strong id="livingCarryoverAmount">¥0</strong>
+            <small id="livingCarryoverMeta">繰越なし</small>
+            <button class="soft-button" type="button" data-carryover="living">翌月へ繰越</button>
+          </article>
+          <article class="carryover-card">
+            <span>立替金</span>
+            <strong id="loanCarryoverAmount">¥0</strong>
+            <small id="loanCarryoverMeta">繰越なし</small>
+            <button class="soft-button" type="button" data-carryover="loan">翌月へ繰越</button>
+          </article>
+        </div>
 
         <h3 class="section-title">初期費用</h3>
         <article class="metric-card wide">
