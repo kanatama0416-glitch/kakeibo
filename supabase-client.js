@@ -263,6 +263,40 @@
     return result.data;
   }
 
+  async function importCsvTransactions(rows) {
+    if (!rows || !rows.length) return [];
+
+    var categoryResult = await client.from("categories").select("id,name");
+    if (categoryResult.error) throw categoryResult.error;
+
+    var categoryIds = {};
+    (categoryResult.data || []).forEach(function (category) {
+      categoryIds[category.name] = category.id;
+    });
+
+    var payload = rows.map(function (tx) {
+      return {
+        transaction_date: tx.date,
+        merchant_name: tx.merchant_name,
+        merchant_raw: tx.merchant_raw || tx.merchant_name,
+        amount: Number(tx.amount || 0),
+        category_id: tx.category_name ? (categoryIds[tx.category_name] || null) : null,
+        scope: tx.scope || "shared",
+        payer: tx.payer || "me",
+        status: "confirmed",
+        source: "csv",
+        memo: tx.memo || null,
+        is_demo: false
+      };
+    });
+
+    var result = await client.from("transactions")
+      .insert(payload)
+      .select("id,transaction_date,merchant_name,amount,scope,payer,status,source,memo");
+    if (result.error) throw result.error;
+    return result.data || [];
+  }
+
   async function syncInitialExpenseRepaymentPlan() {
     var expenseResult = await client.from("initial_expenses")
       .select("amount,payer");
@@ -421,6 +455,7 @@
     deleteTransaction: deleteTransaction,
     addLoan: addLoan,
     addManualTransaction: addManualTransaction,
+    importCsvTransactions: importCsvTransactions,
     addInitialExpense: addInitialExpense,
     updateInitialExpense: updateInitialExpense,
     deleteInitialExpense: deleteInitialExpense,
