@@ -1562,7 +1562,7 @@
 
   function confirmedSpending(transactions) {
     return transactions.filter(function (t) {
-      return t.status === "confirmed";
+      return t.status === "confirmed" || t.status === "refunded";
     });
   }
 
@@ -1579,7 +1579,7 @@
     return Object.keys(totals).map(function (name) {
       return { name:name, amount:totals[name] };
     }).sort(function (a,b) {
-      return b.amount - a.amount;
+      return Math.abs(b.amount) - Math.abs(a.amount);
     });
   }
 
@@ -1617,10 +1617,10 @@
     }
 
     empty.classList.add("hidden");
-    var maxAmount = entries[0].amount || 1;
+    var maxAmount = Math.max.apply(null, entries.map(function (x) { return Math.abs(x.amount); }).concat([1]));
     var colors = categoryColorMap(entries.map(function (x) { return x.name; }));
     container.innerHTML = entries.slice(0, 6).map(function (entry) {
-      var width = Math.max(4, Math.round(entry.amount / maxAmount * 100));
+      var width = Math.max(4, Math.round(Math.abs(entry.amount) / maxAmount * 100));
       return '<div class="category-bar-row">' +
         '<div class="category-bar-head"><span>' + escapeHtml(entry.name) + '</span><strong>' +
         yen(entry.amount) + '</strong></div>' +
@@ -1648,7 +1648,7 @@
     var categories = Object.keys(categorySet).sort(function (a,b) {
       var totalA = rows.reduce(function (sum,row) { return sum + Number(row.totals[a] || 0); }, 0);
       var totalB = rows.reduce(function (sum,row) { return sum + Number(row.totals[b] || 0); }, 0);
-      return totalB - totalA;
+      return Math.abs(totalB) - Math.abs(totalA);
     });
 
     var colorMap = categoryColorMap(categories);
@@ -1657,7 +1657,7 @@
         return sum + Number(row.totals[key] || 0);
       }, 0);
     });
-    var maxTotal = Math.max.apply(null, totalsByMonth.concat([1]));
+    var maxTotal = Math.max.apply(null, totalsByMonth.map(function (x) { return Math.abs(x); }).concat([1]));
     var rangeTotal = totalsByMonth.reduce(function (sum,x) { return sum + x; }, 0);
 
     document.getElementById("analysisRangeLabel").textContent =
@@ -1681,11 +1681,14 @@
 
     chart.innerHTML = rows.map(function (row, index) {
       var monthTotal = totalsByMonth[index];
-      var height = monthTotal ? Math.max(8, Math.round(monthTotal / maxTotal * 100)) : 0;
+      var height = monthTotal ? Math.max(8, Math.round(Math.abs(monthTotal) / maxTotal * 100)) : 0;
+      var positiveTotal = categories.reduce(function (sum, category) {
+        return sum + Math.max(0, Number(row.totals[category] || 0));
+      }, 0);
       var segments = categories.map(function (category) {
         var amount = Number(row.totals[category] || 0);
-        if (!amount || !monthTotal) return "";
-        var segmentHeight = amount / monthTotal * 100;
+        if (amount <= 0 || positiveTotal <= 0) return "";
+        var segmentHeight = amount / positiveTotal * 100;
         return '<span class="stack-segment" title="' + escapeHtml(category) + ' ' + yen(amount) +
           '" style="height:' + segmentHeight + '%;background:' + colorMap[category] + '">' +
           '<b class="stack-segment-value">' + yen(amount) + '</b></span>';
@@ -1704,20 +1707,51 @@
     }).join("");
   }
 
-  function carryInAmount(category, monthKey) {
-    var targetMonth = monthKey || state.currentMonth;
-    return (state.data.carryovers || []).filter(function (x) {
-      return x.category === category && monthKeyFromDate(x.to_month) === targetMonth;
-    }).reduce(function (sum, x) {
-      return sum + Number(x.amount || 0);
-    }, 0);
-  }
-
   function carryOutRecord(category, monthKey) {
     var targetMonth = monthKey || state.currentMonth;
     return (state.data.carryovers || []).find(function (x) {
       return x.category === category && monthKeyFromDate(x.from_month) === targetMonth;
     }) || null;
+  }
+
+  function baseLivingCurrent(monthKey) {
+    var monthTransactions = (state.data.transactions || []).filter(function (t) {
+      return monthKeyFromDate(t.date) === monthKey &&
+        t.scope === "shared" &&
+        (t.status === "confirmed" || t.status === "refunded");
+    });
+    var total = monthTransactions.reduce(function (sum, t) {
+      return sum + Number(t.amount || 0);
+    }, 0);
+    var myShare = Math.round(total * currentMeSharePercent() / 100);
+    var paidByMe = monthTransactions.filter(function (t) {
+      return t.payer === "me";
+    }).reduce(function (sum, t) {
+      return sum + Number(t.amount || 0);
+    }, 0);
+    return paidByMe - myShare;
+  }
+
+  function effectiveCarryOutAmount(monthKey, depth) {
+    if (!monthKey || monthKey < OPERATION_START_MONTH) return 0;
+    if ((depth || 0) > 120) return 0;
+
+    var carryIn = monthKey === OPERATION_START_MONTH
+      ? 0
+      : effectiveCarryOutAmount(addMonths(monthKey, -1), (depth || 0) + 1);
+    var settlement = baseLivingCurrent(monthKey) + carryIn;
+    var record = carryOutRecord("living", monthKey);
+    if (!record || settlement === 0) return 0;
+
+    var raw = Number(record.amount || 0);
+    if (!raw || Math.sign(raw) !== Math.sign(settlement)) return 0;
+    return Math.sign(settlement) * Math.min(Math.abs(raw), Math.abs(settlement));
+  }
+
+  function carryInAmount(category, monthKey) {
+    var targetMonth = monthKey || state.currentMonth;
+    if (category !== "living" || targetMonth <= OPERATION_START_MONTH) return 0;
+    return effectiveCarryOutAmount(addMonths(targetMonth, -1), 0);
   }
 
   function repaymentRecord(monthKey, plan) {
@@ -1764,7 +1798,7 @@
       return monthKeyFromDate(t.date) === targetMonth;
     });
     var shared = monthTransactions.filter(function (t) {
-      return t.scope === "shared" && t.status === "confirmed";
+      return t.scope === "shared" && (t.status === "confirmed" || t.status === "refunded");
     });
     var total = shared.reduce(function (s,t) { return s + Number(t.amount); }, 0);
     var meSharePercent = currentMeSharePercent();
@@ -1781,7 +1815,7 @@
     var carryInLiving = carryInAmount("living", targetMonth);
     var livingSettlement = livingCurrent + carryInLiving;
     var livingCarryOutRecord = carryOutRecord("living", targetMonth);
-    var livingCarryOut = livingCarryOutRecord ? Number(livingCarryOutRecord.amount || 0) : 0;
+    var livingCarryOut = effectiveCarryOutAmount(targetMonth, 0);
     var livingPayNow = livingSettlement - livingCarryOut;
 
     var plan = state.data.repayment_plan || {
@@ -1836,7 +1870,7 @@
     var paymentMonth = state.currentMonth;
     var sourceMonth = addMonths(paymentMonth, -1);
     var paidRecord = paidSettlementRecord(sourceMonth);
-    var hasSourceMonth = sourceMonth >= earliestAvailableMonth() || !!paidRecord;
+    var hasSourceMonth = (sourceMonth >= OPERATION_START_MONTH && sourceMonth <= addMonths(actualMonthKey(), -1)) || !!paidRecord;
     var sourceSummary = hasSourceMonth ? calculateSummary(sourceMonth) : null;
     var amount = paidRecord
       ? Number(paidRecord.amount || 0)
@@ -1960,8 +1994,9 @@
     var livingPreset = livingOut ? Math.abs(Number(livingOut.amount || 0)) : 0;
     livingInput.max = String(livingAvailable);
     livingInput.value = String(Math.min(livingAvailable, livingPreset));
-    livingInput.disabled = livingAvailable === 0;
-    livingButton.disabled = livingAvailable === 0;
+    var livingLocked = !!paidSettlementRecord(state.currentMonth);
+    livingInput.disabled = livingAvailable === 0 || livingLocked;
+    livingButton.disabled = livingAvailable === 0 || livingLocked;
 
     document.getElementById("livingCarryoverSourceLabel").textContent =
       selectedMonthLabel + "の精算差額";
@@ -1971,8 +2006,10 @@
       yen(Math.max(0, livingAvailable - Math.min(livingAvailable, livingPreset)));
     document.getElementById("livingNextMonthAmount").textContent =
       yen(Math.min(livingAvailable, livingPreset));
-    livingButton.textContent = livingOut ? "繰越額を更新" : "繰越額を保存";
-    document.getElementById("cancelLivingCarryoverButton").classList.toggle("hidden", !livingOut);
+    livingButton.textContent = livingLocked
+      ? "精算済みのため変更不可"
+      : (livingOut ? "繰越額を更新" : "繰越額を保存");
+    document.getElementById("cancelLivingCarryoverButton").classList.toggle("hidden", !livingOut || livingLocked);
 
     var initialExpenses = state.data.initial_expenses || [];
     var initialTotal = initialExpenses.reduce(function (sum, x) {
@@ -2102,17 +2139,14 @@
     document.getElementById("classifyId").value = Number(id);
     document.getElementById("classifyTitle").textContent =
       tx.merchant_name + (mode === "classify" ? " を分類" : " を編集");
-
-    var categorySelect = document.getElementById("classifyCategory");
-    var scopeSelect = document.getElementById("classifyScope");
-    var payerSelect = document.getElementById("classifyPayer");
-    var ruleSelect = document.getElementById("ruleMode");
-
-    if (tx.category_name) categorySelect.value = tx.category_name;
-    scopeSelect.value = tx.scope || "shared";
-    payerSelect.value = tx.payer || "me";
-    ruleSelect.value = "once";
-
+    document.getElementById("classifyDate").value = tx.date || "";
+    document.getElementById("classifyMerchantName").value = tx.merchant_name || "";
+    document.getElementById("classifyAmount").value = String(tx.amount == null ? "" : tx.amount);
+    document.getElementById("classifyCategory").value = tx.category_name || "";
+    document.getElementById("classifyScope").value = tx.scope || "shared";
+    document.getElementById("classifyPayer").value = tx.payer || "me";
+    document.getElementById("classifyMemo").value = tx.memo || "";
+    document.getElementById("ruleMode").value = "once";
     document.getElementById("classifyDialog").showModal();
   }
 
@@ -2277,13 +2311,12 @@
     var select = document.getElementById("monthSelect");
     if (!select) return;
 
-    var startMonth = earliestAvailableMonth();
-    var endMonth = addMonths(OPERATION_START_MONTH, 59);
-    if (state.currentMonth > endMonth) endMonth = state.currentMonth;
-
+    var startMonth = OPERATION_START_MONTH;
+    var endMonth = maxSelectableMonth();
     var options = [];
     var key = startMonth;
     var guard = 0;
+
     while (key <= endMonth && guard < 120) {
       options.push('<option value="' + key + '">' +
         key.split("-")[0] + "年" + Number(key.split("-")[1]) + "月分</option>");
@@ -2292,6 +2325,9 @@
     }
 
     select.innerHTML = options.join("");
+    if (state.currentMonth < startMonth || state.currentMonth > endMonth) {
+      state.currentMonth = endMonth;
+    }
     select.value = state.currentMonth;
   }
 
