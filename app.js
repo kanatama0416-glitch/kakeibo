@@ -58,11 +58,11 @@
 
   function txRow(tx) {
     var sub = shortDate(tx.date) + " ・ " + (tx.category_name || "未分類") + " ・ " + scopeLabel(tx.scope);
-    return '<div class="transaction-row">' +
+    return '<button type="button" class="transaction-row transaction-edit-row" data-edit-tx="' + tx.id + '">' +
       '<div class="tx-icon">' + iconFor(tx) + '</div>' +
       '<div class="tx-main"><strong>' + escapeHtml(tx.merchant_name) + '</strong><small>' + sub + '</small></div>' +
       '<div class="tx-side"><div class="tx-amount">' + yen(tx.amount) + '</div>' +
-      '<button type="button" class="tx-edit" data-edit-tx="' + tx.id + '">編集</button></div></div>';
+      '<span class="tx-edit-label">編集 ›</span></div></button>';
   }
 
   function carryInAmount(category) {
