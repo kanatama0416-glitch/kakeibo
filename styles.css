@@ -260,3 +260,12 @@ dialog{width:min(430px,calc(100% - 28px));border:0;border-radius:24px;padding:0;
 @media(max-width:370px){
   .money-total-row{align-items:flex-start;flex-direction:column;gap:8px}
 }
+
+/* selectable carryover amount 2026-09-27 */
+.carryover-amount-label{display:block;margin:10px 0 10px}
+.carryover-amount-label>span{display:block;margin-bottom:6px;color:var(--muted);font-size:10px;font-weight:900}
+.carryover-input-wrap{display:flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:13px;background:#fff;padding:0 11px}
+.carryover-input-wrap b{font-size:14px;color:var(--text)}
+.carryover-input-wrap input{min-width:0;width:100%;border:0;outline:0;background:transparent;padding:10px 0;font-size:16px;font-weight:900;color:var(--text)}
+.carryover-input-wrap:focus-within{border-color:#97bea9;box-shadow:0 0 0 3px rgba(31,122,90,.08)}
+.carryover-input-wrap:has(input:disabled){opacity:.5}

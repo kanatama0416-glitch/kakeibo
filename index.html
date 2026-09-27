@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="./assets/app-icon-180.png?v=20260927-1438">
   <link rel="icon" type="image/png" href="./assets/app-icon-180.png?v=20260927-1438">
   <link rel="manifest" href="./manifest.webmanifest?v=20260927-1438">
-  <link rel="stylesheet" href="./styles.css?v=20260927-CSV2">
+  <link rel="stylesheet" href="./styles.css?v=20260927-CARRYOVER1">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -192,6 +192,10 @@
               <span>生活費の精算差額</span>
               <strong id="livingCarryoverAmount">¥0</strong>
               <small id="livingCarryoverMeta">繰越なし</small>
+              <label class="carryover-amount-label" for="livingCarryoverInput">
+                <span>繰越する金額</span>
+                <div class="carryover-input-wrap"><b>¥</b><input id="livingCarryoverInput" type="number" min="0" step="1" inputmode="numeric" value="0"></div>
+              </label>
               <button class="soft-button" type="button" data-carryover="living">翌月へ繰越</button>
             </article>
           </div>
@@ -393,7 +397,7 @@
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
   <script src="./supabase-client.js?v=20260927-CSV2"></script>
-  <script src="./app.js?v=20260927-RAKUTENPDF4"></script>
+  <script src="./app.js?v=20260927-CARRYOVER1"></script>
   <script src="./auth.js?v=20260927-1426"></script>
 </body>
 </html>
