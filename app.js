@@ -43,7 +43,6 @@
 
     var datedCollections = [
       state.data.transactions || [],
-      state.data.loans || [],
       state.data.initial_expenses || []
     ];
 
@@ -1551,15 +1550,6 @@
     var livingCarryOut = livingCarryOutRecord ? Number(livingCarryOutRecord.amount || 0) : 0;
     var livingPayNow = livingSettlement - livingCarryOut;
 
-    var monthLoans = state.data.loans.filter(function (x) {
-      return monthKeyFromDate(x.date) === targetMonth && x.status === "open";
-    });
-    var loanCurrent = monthLoans.reduce(function (sum, x) {
-      return sum + (x.lender === "me" ? Number(x.amount) : -Number(x.amount));
-    }, 0);
-    var carryInLoan = carryInAmount("loan", targetMonth);
-    var loanNet = loanCurrent + carryInLoan;
-
     var plan = state.data.repayment_plan || {
       id:null, original_amount:0, remaining_amount:0, monthly_amount:0, lender:"me", borrower:"partner"
     };
@@ -1579,15 +1569,11 @@
       livingSettlement:livingSettlement,
       livingCarryOut:livingCarryOut,
       livingPayNow:livingPayNow,
-      loanCurrent:loanCurrent,
-      carryInLoan:carryInLoan,
-      loanNet:loanNet,
       monthlyRepayment:monthlyRepayment,
       repaymentNet:repaymentNet,
       finalSettlement:finalSettlement,
       plan:plan,
-      monthTransactions:monthTransactions,
-      monthLoans:monthLoans
+      monthTransactions:monthTransactions
     };
   }
 
@@ -2545,16 +2531,12 @@
   document.querySelectorAll("[data-carryover]").forEach(function (button) {
     button.addEventListener("click", async function () {
       var category = button.getAttribute("data-carryover");
+      if (category !== "living") return;
       var summary = calculateSummary();
-      var available = category === "living"
-        ? Math.abs(summary.livingSettlement)
-        : Math.abs(summary.loanNet);
+      var available = Math.abs(summary.livingSettlement);
       if (!available) return;
 
-      var selectedAmount = available;
-      if (category === "living") {
-        selectedAmount = Number(document.getElementById("livingCarryoverInput").value || 0);
-      }
+      var selectedAmount = Number(document.getElementById("livingCarryoverInput").value || 0);
       if (!Number.isFinite(selectedAmount) || selectedAmount < 0) {
         alert("繰越する金額を入力してください。");
         return;
@@ -2564,9 +2546,9 @@
         return;
       }
 
-      var baseAmount = category === "living" ? summary.livingSettlement : summary.loanNet;
+      var baseAmount = summary.livingSettlement;
       var amount = baseAmount < 0 ? -selectedAmount : selectedAmount;
-      var label = category === "living" ? "生活費の精算差額" : "立替金";
+      var label = "生活費の精算差額";
       var nextMonth = addMonths(state.currentMonth, 1);
       var payNow = available - selectedAmount;
       var ok = window.confirm(
@@ -2652,31 +2634,6 @@
     } catch (e) {
       console.error(e);
       alert("明細の変更を保存できませんでした。");
-    }
-  });
-
-  document.getElementById("loanForm").addEventListener("submit", async function () {
-    var loan = {
-      date: document.getElementById("loanDate").value,
-      description: document.getElementById("loanDescription").value.trim(),
-      amount: Number(document.getElementById("loanAmount").value || 0),
-      lender: document.getElementById("loanLender").value,
-      memo: document.getElementById("loanMemo").value.trim()
-    };
-
-    if (!loan.date || !loan.description || loan.amount <= 0) return;
-
-    try {
-      await window.kakeiboDb.addLoan(loan);
-      state.data = await window.kakeiboDb.getInitialData();
-      document.getElementById("loanForm").reset();
-      setDefaultEntryDates();
-      render();
-      window.setTimeout(scheduleFloatingUiSync, 0);
-      window.setTimeout(scheduleFloatingUiSync, 300);
-    } catch (e) {
-      console.error(e);
-      alert("立替を保存できませんでした。");
     }
   });
 
@@ -2767,7 +2724,7 @@
       ? today
       : state.currentMonth + "-01";
 
-    ["manualExpenseDate", "loanDate", "initialExpenseDate"].forEach(function (id) {
+    ["manualExpenseDate", "initialExpenseDate"].forEach(function (id) {
       var input = document.getElementById(id);
       if (input && (force || !input.value)) input.value = defaultDate;
     });
