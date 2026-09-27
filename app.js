@@ -1239,6 +1239,7 @@
         row.duplicate = true;
         row.selected = false;
         row.matchReason = existing.reason;
+        row.matchedTx = existing.tx;
       }
 
       seen[key] = true;
@@ -1325,6 +1326,7 @@
           row.duplicate = true;
           row.selected = false;
           row.matchReason = existing.reason;
+        row.matchedTx = existing.tx;
         }
 
         seen[key] = true;
@@ -1389,6 +1391,7 @@
         row.duplicate = true;
         row.selected = false;
         row.matchReason = existing.reason;
+        row.matchedTx = existing.tx;
       }
       csvSeen[csvKey] = true;
       result.push(row);
@@ -1397,15 +1400,36 @@
     return { rows:result, ignored:ignored };
   }
 
+  function csvMatchedTxDetails(row) {
+    var tx = row.matchedTx;
+    if (!tx) return "";
+
+    var txMeta = shortDate(tx.date) + " ・ " +
+      (tx.category_name || "その他") + " ・ " + scopeLabel(tx.scope);
+    var memo = normalizeText(tx.memo);
+
+    return '<details class="csv-match-compare">' +
+      '<summary>似ている明細を見る</summary>' +
+      '<div class="csv-match-detail">' +
+      '<div class="csv-match-detail-kicker">家計簿にある候補</div>' +
+      '<div class="csv-match-detail-head"><strong>' +
+      escapeHtml(tx.merchant_name || "利用先未設定") + '</strong><b>' + yen(tx.amount) + '</b></div>' +
+      '<div class="csv-match-detail-meta">' + escapeHtml(txMeta) + '</div>' +
+      (memo ? '<div class="csv-match-detail-memo">メモ：' + escapeHtml(memo) + '</div>' : '') +
+      '</div></details>';
+  }
+
   function csvReviewRow(row, index) {
     var meta = shortDate(row.date) + " ・ " +
       (row.category_name || "その他") + " ・ " + scopeLabel(row.scope);
-    return '<label class="csv-review-row' + (row.duplicate ? " duplicate" : "") + '">' +
-      '<input type="checkbox" data-csv-row="' + index + '"' + (row.selected ? " checked" : "") + '>' +
+    return '<div class="csv-review-row' + (row.duplicate ? " duplicate" : "") + '">' +
+      '<input type="checkbox" data-csv-row="' + index + '" aria-label="この明細を反映する"' +
+      (row.selected ? " checked" : "") + '>' +
       '<div class="csv-review-main"><strong>' + escapeHtml(row.merchant_name) + '</strong>' +
       '<div class="csv-review-meta"><span>' + escapeHtml(meta) + '</span><b>' + yen(row.amount) + '</b></div>' +
       (row.matchReason ? '<div class="csv-match-reason">' + escapeHtml(row.matchReason) + '</div>' : '') +
-      '</div></label>';
+      csvMatchedTxDetails(row) +
+      '</div></div>';
   }
 
   function updateCsvImportButton() {
