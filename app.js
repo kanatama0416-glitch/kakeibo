@@ -463,7 +463,10 @@
 
   function findCsvExistingMatch(row) {
     var merchantKey = normalizeMerchant(row.merchant_name);
-    var exactMerchant = state.data.transactions.find(function (tx) {
+    var matchCandidates = state.data.transactions.filter(function (tx) {
+      return normalizeText(tx.memo).indexOf("現金") === -1;
+    });
+    var exactMerchant = matchCandidates.find(function (tx) {
       return tx.date === row.date &&
         Number(tx.amount) === Number(row.amount) &&
         normalizeMerchant(tx.merchant_name) === merchantKey;
@@ -475,7 +478,7 @@
       };
     }
 
-    var sameDateAmount = state.data.transactions.find(function (tx) {
+    var sameDateAmount = matchCandidates.find(function (tx) {
       return tx.date === row.date && Number(tx.amount) === Number(row.amount);
     });
     if (sameDateAmount) {
@@ -485,7 +488,7 @@
       };
     }
 
-    var nearbyMerchant = state.data.transactions.find(function (tx) {
+    var nearbyMerchant = matchCandidates.find(function (tx) {
       return Number(tx.amount) === Number(row.amount) &&
         normalizeMerchant(tx.merchant_name) === merchantKey &&
         dateDistanceInDays(tx.date, row.date) <= 3;
