@@ -172,6 +172,68 @@
     }
   }
 
+  async function syncInitialExpenseRepaymentPlan() {
+    var expenseResult = await client.from("initial_expenses")
+      .select("amount,payer");
+    if (expenseResult.error) throw expenseResult.error;
+
+    var expenses = expenseResult.data || [];
+    var total = expenses.reduce(function (sum, x) {
+      return sum + Number(x.amount || 0);
+    }, 0);
+    var paidByMe = expenses.filter(function (x) {
+      return x.payer === "me";
+    }).reduce(function (sum, x) {
+      return sum + Number(x.amount || 0);
+    }, 0);
+
+    // Basic household split is currently 50/50.
+    // Positive means うー owes にゃち; negative means にゃち owes うー.
+    var net = Math.round(paidByMe - total / 2);
+    var originalAmount = Math.abs(net);
+    var lender = net >= 0 ? "me" : "partner";
+    var borrower = net >= 0 ? "partner" : "me";
+
+    var planResult = await client.from("repayment_plans")
+      .select("id,original_amount,remaining_amount,monthly_amount,lender,borrower")
+      .eq("is_demo", false)
+      .order("id")
+      .limit(1);
+    if (planResult.error) throw planResult.error;
+
+    var current = (planResult.data || [])[0] || null;
+    if (!current) {
+      var insertPlan = await client.from("repayment_plans").insert({
+        title: "同棲初期費用",
+        original_amount: originalAmount,
+        remaining_amount: originalAmount,
+        monthly_amount: 0,
+        lender: lender,
+        borrower: borrower,
+        is_demo: false
+      });
+      if (insertPlan.error) throw insertPlan.error;
+      return;
+    }
+
+    var sameDirection = current.lender === lender && current.borrower === borrower;
+    var repaid = sameDirection
+      ? Math.max(0, Number(current.original_amount || 0) - Number(current.remaining_amount || 0))
+      : 0;
+    var remainingAmount = Math.max(0, originalAmount - repaid);
+
+    var updatePlan = await client.from("repayment_plans")
+      .update({
+        original_amount: originalAmount,
+        remaining_amount: remainingAmount,
+        lender: lender,
+        borrower: borrower
+      })
+      .eq("id", current.id)
+      .eq("is_demo", false);
+    if (updatePlan.error) throw updatePlan.error;
+  }
+
   async function addInitialExpense(expense) {
     var result = await client.from("initial_expenses")
       .insert({
@@ -184,6 +246,8 @@
       .select("id,expense_date,item_name,amount,payer,memo")
       .single();
     if (result.error) throw result.error;
+
+    await syncInitialExpenseRepaymentPlan();
     return result.data;
   }
 
