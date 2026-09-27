@@ -76,9 +76,24 @@
 
     <main>
       <section class="screen active" data-screen="home">
+        <article id="paymentDueCard" class="payment-due-card">
+          <div class="payment-due-head">
+            <div>
+              <span id="paymentDueTitle" class="payment-due-title">10月に払う額</span>
+              <small id="paymentDueSource">9月分の精算</small>
+            </div>
+            <span id="paymentDueStatus" class="payment-status unpaid">未払い</span>
+          </div>
+          <strong id="paymentDueAmount" class="payment-due-amount">¥0</strong>
+          <p id="paymentDueDirection" class="payment-due-direction">精算額を計算しています</p>
+          <p id="paymentDueMeta" class="payment-due-meta">前月分を今月末に精算します。</p>
+          <button id="payCurrentSettlementButton" class="payment-paid-button" type="button">払ったよー</button>
+          <button id="undoPaymentButton" class="payment-undo-button hidden" type="button">支払いを取り消す</button>
+        </article>
+
         <article class="settlement-card">
           <div class="settlement-card-head">
-            <p id="settlementTitle">10月分の精算</p>
+            <p id="settlementTitle">10月分の精算見込み</p>
             <span class="settlement-cycle">翌月末精算</span>
           </div>
           <p id="settlementTiming" class="settlement-timing">11月末に確定・精算</p>
@@ -326,7 +341,7 @@
 
   <dialog id="breakdownDialog">
     <form method="dialog" class="dialog-card">
-      <div class="dialog-head"><h3>今月の精算内訳</h3><button type="button" data-close-dialog>×</button></div>
+      <div class="dialog-head"><h3 id="breakdownTitle">10月分の精算内訳</h3><button type="button" data-close-dialog>×</button></div>
       <div id="breakdownList"></div>
     </form>
   </dialog>
