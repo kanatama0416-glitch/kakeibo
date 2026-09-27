@@ -431,6 +431,14 @@
     return result.data;
   }
 
+  async function deleteCarryover(category, fromMonth) {
+    var result = await client.from("monthly_carryovers")
+      .delete()
+      .eq("from_month", fromMonth + "-01")
+      .eq("category", category);
+    if (result.error) throw result.error;
+  }
+
   async function updateRepaymentAmount(planId, amount) {
     var result = await client.from("repayment_plans")
       .update({ monthly_amount: amount })
@@ -460,6 +468,7 @@
     updateInitialExpense: updateInitialExpense,
     deleteInitialExpense: deleteInitialExpense,
     saveCarryover: saveCarryover,
+    deleteCarryover: deleteCarryover,
     updateRepaymentAmount: updateRepaymentAmount
   };
 })();

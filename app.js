@@ -1402,6 +1402,7 @@
     document.getElementById("livingNextMonthAmount").textContent =
       yen(Math.min(livingAvailable, livingPreset));
     livingButton.textContent = livingOut ? "繰越額を更新" : "繰越額を保存";
+    document.getElementById("cancelLivingCarryoverButton").classList.toggle("hidden", !livingOut);
 
     var initialExpenses = state.data.initial_expenses || [];
     var initialTotal = initialExpenses.reduce(function (sum, x) {
@@ -1737,6 +1738,28 @@
     selected = Math.min(available, selected);
     document.getElementById("livingPayNowAmount").textContent = yen(available - selected);
     document.getElementById("livingNextMonthAmount").textContent = yen(selected);
+  });
+
+  document.getElementById("cancelLivingCarryoverButton").addEventListener("click", async function () {
+    var livingOut = carryOutRecord("living");
+    if (!livingOut) return;
+
+    var nextMonth = addMonths(state.currentMonth, 1);
+    var ok = window.confirm(
+      monthLabel(state.currentMonth) + "から" + monthLabel(nextMonth) + "への繰越 " +
+      yen(Math.abs(Number(livingOut.amount || 0))) + " を取り消しますか？\n" +
+      "取り消した分は " + monthLabel(state.currentMonth) + " の精算額に戻ります。"
+    );
+    if (!ok) return;
+
+    try {
+      await window.kakeiboDb.deleteCarryover("living", state.currentMonth);
+      state.data = await window.kakeiboDb.getInitialData();
+      render();
+    } catch (e) {
+      console.error(e);
+      alert("繰越を取り消せませんでした。");
+    }
   });
 
   document.querySelectorAll("[data-carryover]").forEach(function (button) {
