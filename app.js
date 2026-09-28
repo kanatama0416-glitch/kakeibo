@@ -3246,6 +3246,8 @@
     manualExpenseMerchantSuggestions.addEventListener("click", function (event) {
       var button = event.target.closest("[data-manual-merchant-rule]");
       if (!button) return;
+      event.preventDefault();
+      event.stopPropagation();
       applyManualMerchantRule(Number(button.getAttribute("data-manual-merchant-rule")));
     });
 
