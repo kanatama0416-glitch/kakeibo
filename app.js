@@ -2672,6 +2672,10 @@
   document.querySelectorAll("[data-open]").forEach(function (button) {
     button.addEventListener("click", function () {
       var dialog = document.getElementById(button.getAttribute("data-open"));
+      if (dialog && dialog.id === "manualExpenseDialog") {
+        var ruleMode = document.getElementById("manualExpenseRuleMode");
+        if (ruleMode) ruleMode.value = "once";
+      }
       if (dialog) dialog.showModal();
     });
   });
@@ -3281,6 +3285,7 @@
       payer:document.getElementById("manualExpensePayer").value,
       memo:document.getElementById("manualExpenseMemo").value.trim()
     };
+    var remember = document.getElementById("manualExpenseRuleMode").value === "merchant";
 
     if (!tx.date || !tx.merchant_name || tx.amount === 0 || !tx.category_name) return;
     if (monthKeyFromDate(tx.date) < OPERATION_START_MONTH) {
@@ -3293,7 +3298,7 @@
     }
 
     try {
-      await window.kakeiboDb.addManualTransaction(tx);
+      await window.kakeiboDb.addManualTransaction(tx, remember);
       state.data = await window.kakeiboDb.getInitialData();
       document.getElementById("manualExpenseForm").reset();
       manualMerchantSelectedValue = "";
