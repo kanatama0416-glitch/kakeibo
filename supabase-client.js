@@ -301,7 +301,7 @@
     if (result.error) throw result.error;
   }
 
-  async function addManualTransaction(tx) {
+  async function addManualTransaction(tx, rememberMerchant) {
     var categoryResult = await client.from("categories")
       .select("id").eq("name", tx.category_name).limit(1);
     if (categoryResult.error) throw categoryResult.error;
@@ -326,6 +326,15 @@
     }).select("id,transaction_date,merchant_name,amount,scope,payer,status,source,memo").single();
 
     if (result.error) throw result.error;
+
+    if (rememberMerchant) {
+      await upsertMerchantRuleForTransaction(
+        String(tx.merchant_name || "").trim(),
+        categoryId,
+        tx.scope
+      );
+    }
+
     return result.data;
   }
 
