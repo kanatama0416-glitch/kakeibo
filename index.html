@@ -427,12 +427,11 @@
     <form class="dialog-card" id="manualExpenseForm">
       <div class="dialog-head"><h3>支出を追加</h3><button type="button" data-close-dialog>×</button></div>
       <label>日付<input id="manualExpenseDate" type="date" required></label>
-      <label class="merchant-autocomplete-label">店舗・内容
-        <div class="merchant-autocomplete">
-          <input id="manualExpenseName" type="text" placeholder="例：アルビス / 電気代" autocomplete="off" aria-autocomplete="list" aria-controls="manualExpenseMerchantSuggestions" aria-expanded="false" required>
-          <div id="manualExpenseMerchantSuggestions" class="merchant-suggestions hidden" role="listbox" aria-label="店舗ルールの候補"></div>
-        </div>
-      </label>
+      <label for="manualExpenseName">店舗・内容</label>
+      <div class="merchant-autocomplete">
+        <input id="manualExpenseName" type="text" placeholder="例：アルビス / 電気代" autocomplete="off" aria-autocomplete="list" aria-controls="manualExpenseMerchantSuggestions" aria-expanded="false" required>
+        <div id="manualExpenseMerchantSuggestions" class="merchant-suggestions hidden" role="listbox" aria-label="店舗ルールの候補"></div>
+      </div>
       <label>金額<input id="manualExpenseAmount" type="number" step="1" placeholder="3000（返金は -1000）" required></label>
       <label>費目<select id="manualExpenseCategory" required></select></label>
       <label>支出区分
@@ -539,7 +538,7 @@
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
   <script src="./supabase-client.js?v=20260927-PAYER1"></script>
-  <script src="./app.js?v=20260928-IMPORTSUMMARY1"></script>
+  <script src="./app.js?v=20260928-MERCHANTSUGGEST3"></script>
   <script src="./auth.js?v=20260927-INTEGRITY1"></script>
 </body>
 </html>
