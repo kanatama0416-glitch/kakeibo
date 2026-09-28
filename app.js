@@ -1484,6 +1484,11 @@
       (row.duplicate ? duplicateRows : newRows).push(item);
     });
 
+    var readTotal = state.csvRows.reduce(function (sum, row) {
+      return sum + Number(row.amount || 0);
+    }, 0);
+    document.getElementById("csvReadCount").textContent = state.csvRows.length + "件";
+    document.getElementById("csvReadTotal").textContent = yen(readTotal);
     document.getElementById("csvNewCount").textContent = newRows.length;
     document.getElementById("csvDuplicateCount").textContent = duplicateRows.length;
     document.getElementById("csvNewList").innerHTML = newRows.length
