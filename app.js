@@ -540,6 +540,74 @@
     }) || null;
   }
 
+  function manualMerchantMatches(value) {
+    var key = normalizeMerchant(value);
+    if (!key) return [];
+
+    return (state.data.merchant_rules || []).map(function (rule) {
+      var ruleKey = normalizeMerchant(rule.merchant_name);
+      return {
+        rule:rule,
+        ruleKey:ruleKey,
+        starts:ruleKey.indexOf(key) === 0
+      };
+    }).filter(function (item) {
+      return item.ruleKey.indexOf(key) !== -1;
+    }).sort(function (a, b) {
+      if (a.starts !== b.starts) return a.starts ? -1 : 1;
+      return String(a.rule.merchant_name || "").localeCompare(String(b.rule.merchant_name || ""), "ja");
+    }).slice(0, 6).map(function (item) {
+      return item.rule;
+    });
+  }
+
+  function hideManualMerchantSuggestions() {
+    var list = document.getElementById("manualExpenseMerchantSuggestions");
+    var input = document.getElementById("manualExpenseName");
+    if (list) {
+      list.classList.add("hidden");
+      list.innerHTML = "";
+    }
+    if (input) input.setAttribute("aria-expanded", "false");
+  }
+
+  function renderManualMerchantSuggestions() {
+    var input = document.getElementById("manualExpenseName");
+    var list = document.getElementById("manualExpenseMerchantSuggestions");
+    if (!input || !list) return;
+
+    var matches = manualMerchantMatches(input.value);
+    if (!matches.length) {
+      hideManualMerchantSuggestions();
+      return;
+    }
+
+    list.innerHTML = matches.map(function (rule) {
+      var detail = rule.mode === "auto"
+        ? escapeHtml(rule.category_name || "未設定") + " ・ " + scopeLabel(rule.scope)
+        : "毎回確認";
+      return '<button type="button" class="merchant-suggestion" role="option" data-manual-merchant-rule="' +
+        rule.id + '"><strong>' + escapeHtml(rule.merchant_name) +
+        '</strong><small>' + detail + '</small></button>';
+    }).join("");
+    list.classList.remove("hidden");
+    input.setAttribute("aria-expanded", "true");
+  }
+
+  function applyManualMerchantRule(id) {
+    var rule = (state.data.merchant_rules || []).find(function (item) {
+      return Number(item.id) === Number(id);
+    });
+    if (!rule) return;
+
+    document.getElementById("manualExpenseName").value = rule.merchant_name || "";
+    if (rule.mode === "auto") {
+      if (rule.category_name) document.getElementById("manualExpenseCategory").value = rule.category_name;
+      document.getElementById("manualExpenseScope").value = rule.scope || "shared";
+    }
+    hideManualMerchantSuggestions();
+  }
+
   function pdfWorkerUrl() {
     return "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
   }
@@ -3163,6 +3231,29 @@
     }
   });
 
+  var manualExpenseNameInput = document.getElementById("manualExpenseName");
+  var manualExpenseMerchantSuggestions = document.getElementById("manualExpenseMerchantSuggestions");
+
+  if (manualExpenseNameInput && manualExpenseMerchantSuggestions) {
+    manualExpenseNameInput.addEventListener("input", renderManualMerchantSuggestions);
+    manualExpenseNameInput.addEventListener("focus", function () {
+      if (this.value.trim()) renderManualMerchantSuggestions();
+    });
+    manualExpenseNameInput.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") hideManualMerchantSuggestions();
+    });
+
+    manualExpenseMerchantSuggestions.addEventListener("click", function (event) {
+      var button = event.target.closest("[data-manual-merchant-rule]");
+      if (!button) return;
+      applyManualMerchantRule(Number(button.getAttribute("data-manual-merchant-rule")));
+    });
+
+    document.addEventListener("click", function (event) {
+      if (!event.target.closest(".merchant-autocomplete")) hideManualMerchantSuggestions();
+    });
+  }
+
   document.getElementById("manualExpenseForm").addEventListener("submit", async function (event) {
     event.preventDefault();
 
@@ -3190,6 +3281,7 @@
       await window.kakeiboDb.addManualTransaction(tx);
       state.data = await window.kakeiboDb.getInitialData();
       document.getElementById("manualExpenseForm").reset();
+      hideManualMerchantSuggestions();
       setDefaultEntryDates();
       document.getElementById("manualExpenseDialog").close();
       render();
