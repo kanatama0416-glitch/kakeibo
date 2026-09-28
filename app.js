@@ -561,6 +561,8 @@
     });
   }
 
+  var manualMerchantSelectedValue = "";
+
   function hideManualMerchantSuggestions() {
     var list = document.getElementById("manualExpenseMerchantSuggestions");
     var input = document.getElementById("manualExpenseName");
@@ -575,6 +577,11 @@
     var input = document.getElementById("manualExpenseName");
     var list = document.getElementById("manualExpenseMerchantSuggestions");
     if (!input || !list) return;
+
+    if (manualMerchantSelectedValue && normalizeMerchant(input.value) === manualMerchantSelectedValue) {
+      hideManualMerchantSuggestions();
+      return;
+    }
 
     var matches = manualMerchantMatches(input.value);
     if (!matches.length) {
@@ -601,6 +608,7 @@
     if (!rule) return;
 
     document.getElementById("manualExpenseName").value = rule.merchant_name || "";
+    manualMerchantSelectedValue = normalizeMerchant(rule.merchant_name || "");
     if (rule.mode === "auto") {
       if (rule.category_name) document.getElementById("manualExpenseCategory").value = rule.category_name;
       document.getElementById("manualExpenseScope").value = rule.scope || "shared";
@@ -3235,7 +3243,12 @@
   var manualExpenseMerchantSuggestions = document.getElementById("manualExpenseMerchantSuggestions");
 
   if (manualExpenseNameInput && manualExpenseMerchantSuggestions) {
-    manualExpenseNameInput.addEventListener("input", renderManualMerchantSuggestions);
+    manualExpenseNameInput.addEventListener("input", function () {
+      if (normalizeMerchant(this.value) !== manualMerchantSelectedValue) {
+        manualMerchantSelectedValue = "";
+      }
+      renderManualMerchantSuggestions();
+    });
     manualExpenseNameInput.addEventListener("focus", function () {
       if (this.value.trim()) renderManualMerchantSuggestions();
     });
@@ -3283,6 +3296,7 @@
       await window.kakeiboDb.addManualTransaction(tx);
       state.data = await window.kakeiboDb.getInitialData();
       document.getElementById("manualExpenseForm").reset();
+      manualMerchantSelectedValue = "";
       hideManualMerchantSuggestions();
       setDefaultEntryDates();
       document.getElementById("manualExpenseDialog").close();
