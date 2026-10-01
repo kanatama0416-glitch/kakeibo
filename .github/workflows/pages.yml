@@ -29,10 +29,18 @@ jobs:
         with:
           enablement: true
 
+      # 公開するのはアプリ本体だけ。supabase/ や test/ は配信しない。
+      - name: Collect site files
+        run: |
+          mkdir -p _site/assets
+          cp index.html config.js supabase-client.js app.js auth.js styles.css \
+             manifest.webmanifest apple-touch-icon.png _site/
+          cp assets/*.webp _site/assets/
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: _site
 
       - name: Deploy to GitHub Pages
         id: deployment

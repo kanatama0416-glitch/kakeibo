@@ -1632,7 +1632,7 @@
   }
 
   function txRow(tx) {
-    var sub = shortDate(tx.date) + " ・ " + (tx.category_name || "その他") + " ・ " +
+    var sub = shortDate(tx.date) + " ・ " + escapeHtml(tx.category_name || "その他") + " ・ " +
       scopeLabel(tx.scope) + " ・ 支払：" + payerLabel(tx.payer);
     return '<button type="button" class="transaction-row transaction-edit-row" data-edit-tx="' + tx.id + '">' +
       '<div class="tx-icon">' + iconFor(tx) + '</div>' +
