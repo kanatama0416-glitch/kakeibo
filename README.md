@@ -31,7 +31,21 @@
 
 現在は、RLS、監査ログ、月次精算RPC、精算済み月の更新ロック、立替金と返済計画の整合性維持をDB側でも行います。
 
-`supabase/schema.sql` は初期構築用のベースラインです。本番と同じ状態を再現するときは、その後に `supabase/migrations/` を適用してください。
+`supabase/schema.sql` は初期構築用の古いベースラインで、**schema.sql + migrations だけでは本番を再現できません**。次のオブジェクトは本番DBにだけ存在し、リポジトリに定義がありません。
+
+- テーブル：`monthly_settlements` / `monthly_repayment_amounts` / `audit_logs`
+- `repayments.repayment_month` 列と `(repayment_plan_id, repayment_month)` の一意制約
+- 関数：`public.kakeibo_undo_settlement_paid`、監査ログ用トリガー関数
+
+本番から現行スキーマを書き出して、ベースラインを置き換えてください（要 Supabase CLI・DBパスワード）。
+
+```sh
+supabase login
+supabase link --project-ref vcokmkljwxuyiytiqtlc
+supabase db dump --schema public,private -f supabase/schema.sql
+```
+
+書き出した後に `private.allowed_users` の実メールが含まれていないか確認してからコミットすること。
 
 ## セキュリティ
 

@@ -2104,6 +2104,34 @@
     return amount >= 0 ? "うー → にゃちへ支払い" : "にゃち → うーへ支払い";
   }
 
+  // 精算するとその月の明細は追加・変更できなくなる。
+  // カード明細は翌月中旬に届くため、取込前に精算していないかを確認させる。
+  function settlementReadinessWarning(monthKey) {
+    var monthTx = (state.data.transactions || []).filter(function (tx) {
+      return monthKeyFromDate(tx.date) === monthKey;
+    });
+    var cards = [
+      { provider:"epos", label:"エポス" },
+      { provider:"rakuten", label:"楽天" }
+    ];
+    var cardLines = cards.map(function (card) {
+      var count = monthTx.filter(function (tx) {
+        return (tx.source === "csv" || tx.source === "pdf") &&
+          (tx.card_provider === card.provider ||
+            (!tx.card_provider && tx.card_label && tx.card_label.indexOf(card.label) !== -1));
+      }).length;
+      return card.label + "：" + (count ? count + "件取込済み" : "未取込");
+    });
+    var unclassified = monthTx.filter(function (tx) {
+      return tx.status === "unclassified";
+    }).length;
+
+    return "\n\n【精算前の確認】" +
+      "\nカード明細 " + cardLines.join(" / ") +
+      (unclassified ? "\n未分類 " + unclassified + "件（精算額に入っていません）" : "") +
+      "\n精算後はこの月の明細を追加・変更できません。";
+  }
+
   function paidSettlementRecord(monthKey) {
     return (state.data.settlements || []).find(function (x) {
       return monthKeyFromDate(x.settlement_month) === monthKey;
@@ -2964,7 +2992,10 @@
       console.error(error);
       button.disabled = false;
       button.textContent = originalText;
-      alert("CSV明細を保存できませんでした。");
+      var importMessage = String((error && error.message) || "");
+      alert(importMessage.indexOf("SETTLED_MONTH_LOCKED") !== -1
+        ? "精算済みの月の明細が含まれているため、保存できませんでした（1件も反映されていません）。画面を再読み込みすると対象の明細が選択不可になります。"
+        : "CSV明細を保存できませんでした。");
     }
   });
 
@@ -3013,6 +3044,7 @@
       monthLabel(sourceMonth) + "分 " + yen(Math.abs(amount)) + "\n" +
       settlementDirection +
       (repaymentAmount ? "\n返済 " + yen(repaymentAmount) + " を含みます" : "") +
+      settlementReadinessWarning(sourceMonth) +
       "\n\n精算済みにしますか？"
     );
     if (!ok) return;
