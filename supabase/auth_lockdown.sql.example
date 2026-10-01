@@ -12,7 +12,7 @@ create table if not exists private.allowed_users (
 revoke all on schema private from public, anon;
 revoke all on all tables in schema private from public, anon;
 grant usage on schema private to authenticated;
-grant select on private.allowed_users to authenticated;
+-- allowed_users は kakeibo_is_allowed()（security definer）経由でのみ参照する
 
 insert into private.allowed_users(email, active)
 values ('{{ALLOWED_EMAIL}}', true)
