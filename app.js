@@ -2110,15 +2110,18 @@
     var monthTx = (state.data.transactions || []).filter(function (tx) {
       return monthKeyFromDate(tx.date) === monthKey;
     });
+    // 楽天はメール自動取込（rakuten_email）が主なので、CSV/PDFだけでなく全取込元を数える。
     var cards = [
-      { provider:"epos", label:"エポス" },
-      { provider:"rakuten", label:"楽天" }
+      { provider:"epos", label:"エポス", emailSource:"epos_email" },
+      { provider:"rakuten", label:"楽天", emailSource:"rakuten_email" }
     ];
+    var importedSources = ["csv", "pdf", "epos_email", "rakuten_email"];
     var cardLines = cards.map(function (card) {
       var count = monthTx.filter(function (tx) {
-        return (tx.source === "csv" || tx.source === "pdf") &&
-          (tx.card_provider === card.provider ||
-            (!tx.card_provider && tx.card_label && tx.card_label.indexOf(card.label) !== -1));
+        if (importedSources.indexOf(tx.source) === -1) return false;
+        if (tx.card_provider) return tx.card_provider === card.provider;
+        return tx.source === card.emailSource ||
+          (!!tx.card_label && tx.card_label.indexOf(card.label) !== -1);
       }).length;
       return card.label + "：" + (count ? count + "件取込済み" : "未取込");
     });
