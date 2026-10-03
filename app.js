@@ -1740,11 +1740,11 @@
   }
 
   function ledgerTxRow(tx) {
-    var meta = shortDate(tx.date) + " ・ " + (tx.category_name || "未設定") + " ・ " +
-      scopeLabel(tx.scope) + " ・ 支払：" + payerLabel(tx.payer) + " ・ " + sourceDisplay(tx);
+    var title = tx.merchant_name + "（" + (tx.category_name || "未設定") + "）　" + shortDate(tx.date);
+    var meta = payerLabel(tx.payer) + " ｜ " + sourceDisplay(tx);
     return '<button type="button" class="transaction-row transaction-edit-row ledger-transaction-row" data-edit-tx="' + tx.id + '">' +
       '<div class="tx-icon">' + escapeHtml(iconFor(tx)) + '</div>' +
-      '<div class="tx-main"><strong>' + escapeHtml(tx.merchant_name) + '</strong><small>' +
+      '<div class="tx-main"><strong>' + escapeHtml(title) + '</strong><small>' +
       escapeHtml(meta) + '</small></div>' +
       '<div class="tx-side"><div class="tx-amount">' + yen(tx.amount) + '</div>' +
       '<span class="tx-edit-label">編集 ›</span></div></button>';
