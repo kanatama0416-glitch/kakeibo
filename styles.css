@@ -550,7 +550,7 @@ html,body,.app-shell{max-width:100%;overflow-x:hidden}
 .ledger-empty-state{margin:26px 0 0;padding:22px 16px;border:1px dashed #d9dee3;border-radius:20px;text-align:center;background:rgba(255,255,255,.55)}
 .ledger-empty-state>p{margin:0;color:#8a9099;font-size:13px;line-height:1.65}
 .ledger-empty-actions,.ledger-actions{display:grid;grid-template-columns:1fr;gap:8px;margin-top:14px}
-.ledger-actions{margin-top:18px}
+.ledger-actions{margin:0 0 14px}
 .ledger-action-button{width:100%;margin-top:0!important;padding:11px 12px}
 .ledger-actions .soft-button,.ledger-empty-actions .soft-button{border:1px solid var(--line);background:#fff;border-radius:14px;color:var(--text);font-weight:900}
 @media(min-width:390px){
