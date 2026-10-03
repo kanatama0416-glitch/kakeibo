@@ -2485,7 +2485,7 @@
     document.querySelectorAll(".chip[data-filter]").forEach(function (chip) {
       var key = chip.getAttribute("data-filter");
       chip.classList.toggle("active", key === state.filter);
-      chip.textContent = chipLabels[key] + (bucketCounts[key] ? " " + bucketCounts[key] : "");
+      chip.textContent = chipLabels[key] + " " + Number(bucketCounts[key] || 0);
     });
     document.getElementById("allTransactions").innerHTML = filtered.map(ledgerTxRow).join("");
     var emptyMessages = {
