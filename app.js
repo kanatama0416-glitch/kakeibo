@@ -2778,7 +2778,7 @@
       };
     });
 
-    document.querySelectorAll("[data-import-batch]").forEach(function (button) {
+    document.querySelectorAll(".import-history-card[data-import-batch]").forEach(function (button) {
       button.onclick = function () {
         openImportBatchDetail(Number(button.getAttribute("data-import-batch")));
       };
