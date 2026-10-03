@@ -149,6 +149,10 @@
 
         <div id="ledgerListView">
           <button id="latestImportSummary" type="button" class="latest-import-summary hidden"></button>
+          <div class="ledger-actions">
+            <button type="button" class="primary-button ledger-action-button" data-open="manualExpenseDialog">＋ 支出を追加</button>
+            <button type="button" class="soft-button ledger-action-button" data-open="csvImportDialog">カード明細を読み込む</button>
+          </div>
           <div class="chips ledger-filters" aria-label="明細の絞り込み">
             <button class="chip active" data-filter="all">すべて</button>
             <button class="chip" data-filter="unsorted">未仕分け</button>
@@ -162,10 +166,6 @@
               <button type="button" class="primary-button ledger-action-button" data-open="manualExpenseDialog">＋ 支出を追加</button>
               <button type="button" class="soft-button ledger-action-button" data-open="csvImportDialog">カード明細を読み込む</button>
             </div>
-          </div>
-          <div class="ledger-actions">
-            <button type="button" class="primary-button ledger-action-button" data-open="manualExpenseDialog">＋ 支出を追加</button>
-            <button type="button" class="soft-button ledger-action-button" data-open="csvImportDialog">カード明細を読み込む</button>
           </div>
         </div>
 
