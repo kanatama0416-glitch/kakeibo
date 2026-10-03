@@ -22,3 +22,13 @@
 - iPhone幅で明細画面に意図しない横スクロールが発生しない。
 - index.html と test/index.html の対象UIを同期し、テストデータでも取込履歴を確認できる。
 - 公開GitHub Pagesの配信ファイルが今回のバージョンに更新されていることを確認する。
+
+## 検証記録
+
+- GitHub source: index.html / test/index.html の必要ID重複なし、app.js が参照するID欠落なし。
+- JavaScript syntax: app.js / supabase-client.js / test/test-db.js を構文チェック済み。
+- Supabase: cards / import_batches 作成、transactions.card_id / import_batch_id 追加を確認済み。
+- Supabase security: cards / import_batches の RLS 有効、anon への権限なし、authenticated への必要最小限の権限と許可ユーザーポリシーを確認済み。
+- GitHub Pages: 公開先で「明細一覧 / 取込履歴」「すべて / 未仕分け / 共同 / 対象外」「＋ 支出を追加」「カード明細を読み込む」、カード所有者・カード名・下4桁・対象月の入力欄を確認済み。
+- GitHub Pages assets: app.js / supabase-client.js / styles.css の今回バージョンが公開配信されていることを確認済み。
+- 認証後の実データを使ったカード取込操作は、検証ブラウザにログインセッションがないため未実行。コード・DBスキーマ・公開配信までを検証対象とした。
