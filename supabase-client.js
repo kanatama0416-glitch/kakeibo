@@ -548,24 +548,26 @@
     return result.data;
   }
 
-  async function addCategory(name) {
+  async function addCategory(name, icon) {
     var value = String(name || "").trim();
+    var iconValue = String(icon || "").trim() || null;
     if (!value) throw new Error("費目名を入力してください。");
 
     var result = await client.from("categories")
-      .insert({ name:value, is_demo:false })
+      .insert({ name:value, icon:iconValue, is_demo:false })
       .select("id,name,icon")
       .single();
     if (result.error) throw result.error;
     return result.data;
   }
 
-  async function updateCategory(id, name) {
+  async function updateCategory(id, name, icon) {
     var value = String(name || "").trim();
+    var iconValue = String(icon || "").trim() || null;
     if (!value) throw new Error("費目名を入力してください。");
 
     var result = await client.from("categories")
-      .update({ name:value })
+      .update({ name:value, icon:iconValue })
       .eq("id", Number(id))
       .select("id,name,icon")
       .single();
