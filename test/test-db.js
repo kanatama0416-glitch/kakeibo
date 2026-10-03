@@ -172,9 +172,9 @@
   }
 
   async function saveAppSettings(percent) { data.settings.me_share_percent=Number(percent);data.settings.updated_at=now();return clone(data.settings); }
-  async function addCategory(name) { var row={id:++ids.category,name:String(name),icon:null};data.categories.push(row);return clone(row); }
-  async function updateCategory(id,name) {
-    var row=data.categories.find(function(x){return Number(x.id)===Number(id);}); if(row){var old=row.name;row.name=String(name);data.transactions.forEach(function(t){if(t.category_name===old)t.category_name=row.name;});data.merchant_rules.forEach(function(r){if(r.category_name===old)r.category_name=row.name;});} return clone(row);
+  async function addCategory(name,icon) { var row={id:++ids.category,name:String(name),icon:String(icon||"").trim()||null};data.categories.push(row);return clone(row); }
+  async function updateCategory(id,name,icon) {
+    var row=data.categories.find(function(x){return Number(x.id)===Number(id);}); if(row){var old=row.name;row.name=String(name);row.icon=String(icon||"").trim()||null;data.transactions.forEach(function(t){if(t.category_name===old)t.category_name=row.name;});data.merchant_rules.forEach(function(r){if(r.category_name===old)r.category_name=row.name;});} return clone(row);
   }
   async function deleteCategory(id) {
     var row=data.categories.find(function(x){return Number(x.id)===Number(id);});
