@@ -87,7 +87,7 @@
 
     while (true) {
       var result = await client.from("transactions")
-        .select("id,transaction_date,merchant_name,merchant_raw,amount,scope,payer,status,source,memo,is_demo,card_provider,card_label,categories(name)")
+        .select("id,transaction_date,merchant_name,merchant_raw,amount,scope,payer,status,source,memo,is_demo,card_provider,card_label,card_id,import_batch_id,created_at,categories(name)")
         .eq("is_demo", false)
         .order("transaction_date", { ascending:false })
         .order("id", { ascending:false })
@@ -134,7 +134,13 @@
       client.from("repayments")
         .select("id,repayment_plan_id,repayment_date,repayment_month,amount,is_demo,created_at")
         .eq("is_demo", false)
-        .order("repayment_month", { ascending:true })
+        .order("repayment_month", { ascending:true }),
+      client.from("cards")
+        .select("id,owner,provider,name,last4,created_at")
+        .order("created_at", { ascending:false }),
+      client.from("import_batches")
+        .select("id,uploader_user_id,uploader_email,uploaded_at,target_month,card_id,file_name,source_format,read_count,imported_count,duplicate_count,error_count,total_amount,created_at")
+        .order("uploaded_at", { ascending:false })
     ]);
 
     results.forEach(function (r, index) {
@@ -166,7 +172,10 @@
           source:t.source,
           memo:t.memo,
           card_provider:t.card_provider,
-          card_label:t.card_label
+          card_label:t.card_label,
+          card_id:t.card_id,
+          import_batch_id:t.import_batch_id,
+          created_at:t.created_at
         };
       }),
       repayment_plan: (results[3].data || [])[0] || null,
@@ -219,7 +228,9 @@
           amount:Number(x.amount || 0),
           created_at:x.created_at
         };
-      })
+      }),
+      cards: results[10].data || [],
+      import_batches: results[11].data || []
     };
   }
 
@@ -338,8 +349,43 @@
     return result.data;
   }
 
-  async function importCsvTransactions(rows) {
-    if (!rows || !rows.length) return [];
+  async function findOrCreateCard(card) {
+    var owner = card && card.owner === "partner" ? "partner" : "me";
+    var provider = String((card && card.provider) || "").trim();
+    var name = String((card && card.name) || "").trim();
+    var last4 = String((card && card.last4) || "").trim() || null;
+    if (!provider || !name) throw new Error("カード情報を確認してください。");
+    if (last4 && !/^\d{4}$/.test(last4)) throw new Error("カード番号下4桁は4桁の数字で入力してください。");
+
+    function baseLookup() {
+      var query = client.from("cards")
+        .select("id,owner,provider,name,last4,created_at")
+        .eq("owner", owner)
+        .eq("provider", provider)
+        .eq("name", name);
+      return last4 ? query.eq("last4", last4) : query.is("last4", null);
+    }
+
+    var existing = await baseLookup().limit(1);
+    if (existing.error) throw existing.error;
+    if ((existing.data || [])[0]) return existing.data[0];
+
+    var inserted = await client.from("cards")
+      .insert({ owner:owner, provider:provider, name:name, last4:last4 })
+      .select("id,owner,provider,name,last4,created_at")
+      .single();
+
+    if (inserted.error && inserted.error.code === "23505") {
+      existing = await baseLookup().limit(1);
+      if (existing.error) throw existing.error;
+      if ((existing.data || [])[0]) return existing.data[0];
+    }
+    if (inserted.error) throw inserted.error;
+    return inserted.data;
+  }
+
+  async function importCsvTransactions(rows, batchMeta) {
+    if (!rows || !rows.length) return { transactions:[], batch:null };
 
     var categoryResult = await client.from("categories").select("id,name");
     if (categoryResult.error) throw categoryResult.error;
@@ -347,6 +393,27 @@
     (categoryResult.data || []).forEach(function (category) {
       categoryIds[category.name] = category.id;
     });
+
+    var card = await findOrCreateCard((batchMeta && batchMeta.card) || {});
+    var targetMonth = String((batchMeta && batchMeta.target_month) || "").slice(0, 7);
+    if (!/^\d{4}-\d{2}$/.test(targetMonth)) throw new Error("対象月を選んでください。");
+
+    var batchInsert = await client.from("import_batches")
+      .insert({
+        target_month:targetMonth + "-01",
+        card_id:card.id,
+        file_name:String((batchMeta && batchMeta.file_name) || "card-statement"),
+        source_format:(batchMeta && batchMeta.source_format) === "pdf" ? "pdf" : "csv",
+        read_count:Number((batchMeta && batchMeta.read_count) || rows.length),
+        imported_count:rows.length,
+        duplicate_count:Number((batchMeta && batchMeta.duplicate_count) || 0),
+        error_count:Number((batchMeta && batchMeta.error_count) || 0),
+        total_amount:Math.round(Number((batchMeta && batchMeta.total_amount) || 0))
+      })
+      .select("id,uploader_user_id,uploader_email,uploaded_at,target_month,card_id,file_name,source_format,read_count,imported_count,duplicate_count,error_count,total_amount,created_at")
+      .single();
+    if (batchInsert.error) throw batchInsert.error;
+    var batch = batchInsert.data;
 
     var payload = rows.map(function (tx) {
       var amount = Number(tx.amount || 0);
@@ -362,20 +429,31 @@
         status:categoryId ? (amount < 0 ? "refunded" : "confirmed") : "unclassified",
         source:tx.source === "pdf" ? "pdf" : "csv",
         memo:tx.memo || null,
-        card_provider:tx.card_provider || null,
-        card_label:tx.card_label || null,
+        card_provider:card.provider,
+        card_label:card.name,
+        card_id:card.id,
+        import_batch_id:batch.id,
         is_demo:false
       };
     }).filter(function (row) {
       return row.amount !== 0;
     });
 
-    if (!payload.length) return [];
+    if (!payload.length) {
+      await client.from("import_batches").delete().eq("id", batch.id);
+      return { transactions:[], batch:null };
+    }
+
     var result = await client.from("transactions")
       .insert(payload)
-      .select("id,transaction_date,merchant_name,amount,scope,payer,status,source,memo,card_provider,card_label");
-    if (result.error) throw result.error;
-    return result.data || [];
+      .select("id,transaction_date,merchant_name,amount,scope,payer,status,source,memo,card_provider,card_label,card_id,import_batch_id,created_at");
+    if (result.error) {
+      await client.from("import_batches").delete().eq("id", batch.id);
+      throw result.error;
+    }
+
+    batch.card = card;
+    return { transactions:result.data || [], batch:batch };
   }
 
   async function addInitialExpense(expense) {
