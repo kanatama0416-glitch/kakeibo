@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="../apple-touch-icon.png?v=20260927-1508">
   <link rel="icon" type="image/png" href="../apple-touch-icon.png?v=20260927-1508">
   <link rel="manifest" href="../manifest.webmanifest?v=20260927-1508">
-  <link rel="stylesheet" href="../styles.css?v=20261003-LEDGERHEIGHT1">
+  <link rel="stylesheet" href="../styles.css?v=20261003-CATEGORYEMOJI1">
 </head>
 <body>
   <section id="authGate" class="auth-gate hidden">
@@ -361,8 +361,9 @@
     <div class="dialog-card settings-dialog-scroll">
       <div class="dialog-head"><h3>費目</h3><button type="button" data-close-dialog>×</button></div>
       <p class="settings-help">支出の分類に使う費目を追加・名前変更・削除できます。</p>
-      <form id="categoryAddForm" class="settings-inline-form">
-        <input id="newCategoryName" type="text" maxlength="40" placeholder="例：交通費" required>
+      <form id="categoryAddForm" class="settings-inline-form category-add-form">
+        <input id="newCategoryIcon" class="category-icon-input" type="text" maxlength="16" placeholder="🚃" aria-label="絵文字">
+        <input id="newCategoryName" type="text" maxlength="40" placeholder="例：交通費" aria-label="費目名" required>
         <button type="submit">追加</button>
       </form>
       <div id="categorySettingsList" class="settings-manage-list"></div>
@@ -587,8 +588,8 @@
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
   <script>window.KAKEIBO_TEST_MODE = true;</script>
-  <script src="./test-db.js?v=20260927-1"></script>
-  <script src="../app.js?v=20261003-IMPORTHISTORY2"></script>
+  <script src="./test-db.js?v=20261003-CATEGORYEMOJI1"></script>
+  <script src="../app.js?v=20261003-CATEGORYEMOJI1"></script>
   <script>
     window.KakeiboApp.start().catch(function (error) {
       console.error(error);
