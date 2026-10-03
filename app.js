@@ -63,11 +63,14 @@
 
   var state = {
     data: null,
-    filter: "unsorted",
+    filter: "all",
     filterTouched: false,
+    ledgerView: "list",
     currentClassifyId: null,
     csvRows: [],
+    csvIgnoredCount: 0,
     importFileType: "csv",
+    importFileName: "",
     started: false,
     currentMonth: defaultMonthKey(),
     analysisStartMonth: null,
@@ -1667,6 +1670,186 @@
       '<span class="tx-edit-label">編集 ›</span></div></button>';
   }
 
+  function cardForId(id) {
+    return (state.data && state.data.cards || []).find(function (card) {
+      return Number(card.id) === Number(id);
+    }) || null;
+  }
+
+  function importBatchForId(id) {
+    return (state.data && state.data.import_batches || []).find(function (batch) {
+      return Number(batch.id) === Number(id);
+    }) || null;
+  }
+
+  function cardDisplay(card, fallback) {
+    if (!card) return fallback || "カード";
+    return card.name + (card.last4 ? " ****" + card.last4 : "");
+  }
+
+  function sourceDisplay(tx) {
+    if (tx.source === "manual") return "手入力";
+    var card = cardForId(tx.card_id);
+    if (card) return cardDisplay(card);
+    if (tx.card_label) return tx.card_label;
+    if (tx.source === "rakuten_email") return "楽天カード";
+    if (tx.source === "epos_email") return "エポスカード";
+    if (tx.source === "pdf") return "PDF取込";
+    if (tx.source === "csv") return "CSV取込";
+    return "取込";
+  }
+
+  function uploaderLabel(batch) {
+    return auditActorLabel({ actor_email: batch && batch.uploader_email });
+  }
+
+  function compactDateTime(value) {
+    if (!value) return "";
+    var date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return String(value);
+    return date.toLocaleString("ja-JP", {
+      timeZone:"Asia/Tokyo",
+      month:"numeric",
+      day:"numeric",
+      hour:"2-digit",
+      minute:"2-digit"
+    });
+  }
+
+  function targetMonthDisplay(value) {
+    var key = String(value || "").slice(0, 7);
+    return /^\d{4}-\d{2}$/.test(key) ? fullMonthLabel(key) : "対象月不明";
+  }
+
+  function ledgerTxRow(tx) {
+    var badge = ledgerBucket(tx) === "unsorted" ? "未仕分け" : ledgerBucket(tx) === "shared" ? "共同" : "対象外";
+    return '<button type="button" class="transaction-row transaction-edit-row ledger-transaction-row" data-edit-tx="' + tx.id + '">' +
+      '<div class="tx-date">' + escapeHtml(shortDate(tx.date)) + '</div>' +
+      '<div class="tx-main"><strong>' + escapeHtml(tx.merchant_name) + '</strong>' +
+      '<small>' + escapeHtml(payerLabel(tx.payer)) + ' ｜ ' + escapeHtml(sourceDisplay(tx)) + '</small></div>' +
+      '<div class="tx-side"><div class="tx-amount">' + yen(tx.amount) + '</div>' +
+      '<span class="ledger-status ' + ledgerBucket(tx) + '">' + badge + '</span></div></button>';
+  }
+
+  function latestImportBatch() {
+    var batches = (state.data && state.data.import_batches || []).slice();
+    batches.sort(function (a,b) {
+      return String(b.uploaded_at || "").localeCompare(String(a.uploaded_at || ""));
+    });
+    return batches[0] || null;
+  }
+
+  function renderLatestImportSummary() {
+    var button = document.getElementById("latestImportSummary");
+    if (!button) return;
+    var batch = latestImportBatch();
+    if (!batch) {
+      button.classList.add("hidden");
+      button.removeAttribute("data-import-batch");
+      return;
+    }
+    var card = cardForId(batch.card_id);
+    button.setAttribute("data-import-batch", String(batch.id));
+    button.innerHTML =
+      '<span>最終取込</span><strong>' + escapeHtml(compactDateTime(batch.uploaded_at)) + ' ' +
+      escapeHtml(uploaderLabel(batch)) + '</strong><small>' +
+      escapeHtml(cardDisplay(card)) + ' ｜ ' + escapeHtml(targetMonthDisplay(batch.target_month)) + '</small>';
+    button.classList.remove("hidden");
+  }
+
+  function renderImportHistory() {
+    var list = document.getElementById("importHistoryList");
+    var empty = document.getElementById("importHistoryEmpty");
+    if (!list || !empty) return;
+    var batches = (state.data && state.data.import_batches || []).slice().sort(function (a,b) {
+      return String(b.uploaded_at || "").localeCompare(String(a.uploaded_at || ""));
+    });
+    empty.classList.toggle("hidden", batches.length > 0);
+    list.innerHTML = batches.map(function (batch) {
+      var card = cardForId(batch.card_id);
+      return '<button type="button" class="import-history-card" data-import-batch="' + batch.id + '">' +
+        '<div class="import-history-head"><time>' + escapeHtml(compactDateTime(batch.uploaded_at)) + '</time>' +
+        '<span>' + escapeHtml(uploaderLabel(batch)) + '</span></div>' +
+        '<strong>' + escapeHtml(targetMonthDisplay(batch.target_month)) + '</strong>' +
+        '<p>' + escapeHtml(cardDisplay(card)) + '</p>' +
+        '<small>' + Number(batch.imported_count || 0) + '件 ｜ ' + yen(batch.total_amount) + '　詳細を見る ›</small>' +
+      '</button>';
+    }).join("");
+  }
+
+  function openImportBatchDetail(id) {
+    var batch = importBatchForId(id);
+    if (!batch) return;
+    var card = cardForId(batch.card_id);
+    var imported = (state.data.transactions || []).filter(function (tx) {
+      return Number(tx.import_batch_id) === Number(batch.id);
+    }).sort(function (a,b) {
+      return String(b.date || "").localeCompare(String(a.date || ""));
+    });
+    var detail = document.getElementById("importBatchDetail");
+    if (!detail) return;
+    detail.innerHTML =
+      '<div class="import-detail-hero"><strong>' + escapeHtml(targetMonthDisplay(batch.target_month)) + '</strong>' +
+      '<span>' + escapeHtml(cardDisplay(card)) + '</span></div>' +
+      '<dl class="import-detail-list">' +
+        '<div><dt>アップロード</dt><dd>' + escapeHtml(auditTimeLabel(batch.uploaded_at)) + '</dd></div>' +
+        '<div><dt>アップロードした人</dt><dd>' + escapeHtml(uploaderLabel(batch)) + '</dd></div>' +
+        '<div><dt>カード所有者</dt><dd>' + escapeHtml(payerLabel(card && card.owner)) + '</dd></div>' +
+        '<div><dt>ファイル</dt><dd>' + escapeHtml(batch.file_name || "-") + '</dd></div>' +
+      '</dl>' +
+      '<div class="import-result-grid">' +
+        '<div><strong>' + Number(batch.imported_count || 0) + '件</strong><span>登録</span></div>' +
+        '<div><strong>' + Number(batch.duplicate_count || 0) + '件</strong><span>重複除外</span></div>' +
+        '<div><strong>' + Number(batch.error_count || 0) + '件</strong><span>エラー</span></div>' +
+        '<div><strong>' + yen(batch.total_amount) + '</strong><span>合計</span></div>' +
+      '</div>' +
+      '<h4 class="import-detail-heading">取り込まれた明細</h4>' +
+      (imported.length ? '<div class="import-detail-transactions">' + imported.map(function (tx) {
+        return '<button type="button" data-edit-tx="' + tx.id + '"><span>' + escapeHtml(shortDate(tx.date)) + '　' +
+          escapeHtml(tx.merchant_name) + '</span><strong>' + yen(tx.amount) + '</strong></button>';
+      }).join("") + '</div>' : '<p class="ledger-empty">この取込に紐づく明細はありません。</p>');
+    document.getElementById("importBatchDialog").showModal();
+    bindDynamicButtons();
+  }
+
+  function renderTransactionSourceMeta(tx) {
+    var box = document.getElementById("transactionSourceMeta");
+    var button = document.getElementById("transactionImportHistoryButton");
+    if (!box || !button) return;
+    var batch = importBatchForId(tx.import_batch_id);
+    var card = cardForId(tx.card_id);
+    if (tx.source === "manual") {
+      box.innerHTML = '<span>登録方法</span><strong>手入力</strong>';
+      button.classList.add("hidden");
+      return;
+    }
+    var html = '<span>登録方法</span><strong>' + escapeHtml(sourceDisplay(tx)) + '</strong>';
+    if (batch) {
+      html += '<small>' + escapeHtml(compactDateTime(batch.uploaded_at)) + '・' +
+        escapeHtml(uploaderLabel(batch)) + 'がアップロード</small>' +
+        '<small>' + escapeHtml(targetMonthDisplay(batch.target_month)) + 'として取込</small>';
+    }
+    box.innerHTML = html;
+    button.classList.toggle("hidden", !batch);
+  }
+
+  function setLedgerView(view) {
+    state.ledgerView = view === "history" ? "history" : "list";
+    var listView = document.getElementById("ledgerListView");
+    var historyView = document.getElementById("importHistoryView");
+    if (listView) listView.classList.toggle("hidden", state.ledgerView !== "list");
+    if (historyView) historyView.classList.toggle("hidden", state.ledgerView !== "history");
+    document.querySelectorAll("[data-ledger-view]").forEach(function (button) {
+      var active = button.getAttribute("data-ledger-view") === state.ledgerView;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-selected", active ? "true" : "false");
+    });
+    var shell = document.getElementById("appShell");
+    if (shell) shell.setAttribute("data-ledger-view", state.ledgerView);
+    var title = document.getElementById("topbarScreenTitle");
+    if (title) title.textContent = state.ledgerView === "history" ? "取込履歴" : "明細";
+  }
+
   var CATEGORY_COLORS = [
     "#1f7a5a",
     "#4f8fa8",
@@ -2284,27 +2467,38 @@
 
     var ledgerTx = summary.monthTransactions.slice()
       .sort(function (a,b) { return b.date.localeCompare(a.date); });
-    var bucketCounts = { unsorted:0, shared:0, excluded:0 };
+    var bucketCounts = { all:ledgerTx.length, unsorted:0, shared:0, excluded:0 };
     ledgerTx.forEach(function (t) { bucketCounts[ledgerBucket(t)] += 1; });
-    if (!state.filterTouched) {
-      state.filter = bucketCounts.unsorted > 0 ? "unsorted" : "shared";
-    }
-    var filtered = ledgerTx.filter(function (t) { return ledgerBucket(t) === state.filter; });
-    var chipLabels = { unsorted:"未仕分け", shared:"共同", excluded:"対象外" };
+    if (!state.filterTouched) state.filter = "all";
+    var filtered = state.filter === "all" ? ledgerTx : ledgerTx.filter(function (t) {
+      return ledgerBucket(t) === state.filter;
+    });
+    var chipLabels = { all:"すべて", unsorted:"未仕分け", shared:"共同", excluded:"対象外" };
     document.querySelectorAll(".chip[data-filter]").forEach(function (chip) {
       var key = chip.getAttribute("data-filter");
       chip.classList.toggle("active", key === state.filter);
       chip.textContent = chipLabels[key] + (bucketCounts[key] ? " " + bucketCounts[key] : "");
     });
-    document.getElementById("allTransactions").innerHTML = filtered.map(txRow).join("");
+    document.getElementById("allTransactions").innerHTML = filtered.map(ledgerTxRow).join("");
     var emptyMessages = {
-      unsorted:ledgerTx.length ? "仕分けが必要な明細はありません。" : "この月の明細はまだありません。「カード明細を読み込む」か＋から追加してください。",
+      all:fullMonthLabel(state.currentMonth) + "の明細はまだありません。",
+      unsorted:ledgerTx.length ? "仕分けが必要な明細はありません。" : fullMonthLabel(state.currentMonth) + "の明細はまだありません。",
       shared:"共同の生活費として仕分けた明細はありません。",
-      excluded:"対象外にした明細はありません。個人の買い物はここに入り、精算には含まれません。"
+      excluded:"対象外にした明細はありません。"
     };
     var emptyEl = document.getElementById("ledgerEmpty");
-    emptyEl.textContent = emptyMessages[state.filter] || "";
-    emptyEl.classList.toggle("hidden", filtered.length > 0);
+    var emptyMessage = document.getElementById("ledgerEmptyMessage");
+    if (emptyMessage) emptyMessage.textContent = emptyMessages[state.filter] || "";
+    if (emptyEl) emptyEl.classList.toggle("hidden", filtered.length > 0);
+    document.querySelectorAll(".ledger-empty-actions").forEach(function (actions) {
+      actions.classList.toggle("hidden", ledgerTx.length > 0);
+    });
+    document.querySelectorAll(".ledger-actions").forEach(function (actions) {
+      actions.classList.toggle("hidden", ledgerTx.length === 0);
+    });
+    renderLatestImportSummary();
+    renderImportHistory();
+    setLedgerView(state.ledgerView);
 
     var nextMonth = addMonths(state.currentMonth, 1);
     var livingOut = carryOutRecord("living");
@@ -2476,6 +2670,7 @@
     document.getElementById("classifyPayer").value = tx.payer || "me";
     document.getElementById("classifyMemo").value = tx.memo || "";
     document.getElementById("ruleMode").value = "once";
+    renderTransactionSourceMeta(tx);
     document.getElementById("classifyDialog").showModal();
   }
 
@@ -2569,7 +2764,15 @@
 
     document.querySelectorAll("[data-edit-tx]").forEach(function (button) {
       button.onclick = function () {
+        var parentDialog = button.closest("dialog");
+        if (parentDialog && parentDialog.open) parentDialog.close();
         openTransactionEditor(Number(button.getAttribute("data-edit-tx")), "edit");
+      };
+    });
+
+    document.querySelectorAll("[data-import-batch]").forEach(function (button) {
+      button.onclick = function () {
+        openImportBatchDetail(Number(button.getAttribute("data-import-batch")));
       };
     });
 
@@ -2724,6 +2927,13 @@
     document.querySelectorAll(".nav-item").forEach(function (x) {
       x.classList.toggle("active", x.getAttribute("data-go") === screen);
     });
+    var shell = document.getElementById("appShell");
+    if (shell) shell.setAttribute("data-current-screen", screen);
+    var title = document.getElementById("topbarScreenTitle");
+    if (title) {
+      title.classList.toggle("hidden", screen !== "transactions");
+      if (screen === "transactions") title.textContent = state.ledgerView === "history" ? "取込履歴" : "明細";
+    }
     window.scrollTo({ top:0, behavior:"smooth" });
     window.setTimeout(scheduleFloatingUiSync, 0);
     window.setTimeout(scheduleFloatingUiSync, 250);
@@ -2749,6 +2959,11 @@
       if (dialog && dialog.id === "manualExpenseDialog") {
         var ruleMode = document.getElementById("manualExpenseRuleMode");
         if (ruleMode) ruleMode.value = "once";
+      }
+      if (dialog && dialog.id === "csvImportDialog") {
+        var targetMonth = document.getElementById("csvTargetMonth");
+        if (targetMonth && !targetMonth.value) targetMonth.value = state.currentMonth;
+        if (targetMonth) targetMonth.min = OPERATION_START_MONTH;
       }
       if (dialog) dialog.showModal();
     });
@@ -2783,6 +2998,42 @@
   document.getElementById("merchantSettingsButton").addEventListener("click", openMerchantRuleAdd);
   document.getElementById("addMerchantRuleButton").addEventListener("click", openMerchantRuleAdd);
   document.getElementById("auditHistoryButton").addEventListener("click", openAuditHistory);
+
+  document.querySelectorAll("[data-ledger-view]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      setLedgerView(button.getAttribute("data-ledger-view"));
+    });
+  });
+
+  document.getElementById("latestImportSummary").addEventListener("click", function () {
+    var id = Number(this.getAttribute("data-import-batch") || 0);
+    if (id) openImportBatchDetail(id);
+  });
+
+  document.getElementById("transactionImportHistoryButton").addEventListener("click", function () {
+    var tx = (state.data.transactions || []).find(function (row) {
+      return Number(row.id) === Number(state.currentClassifyId);
+    });
+    if (!tx || !tx.import_batch_id) return;
+    document.getElementById("classifyDialog").close();
+    openImportBatchDetail(tx.import_batch_id);
+  });
+
+  document.getElementById("importCompleteTransactionsButton").addEventListener("click", function () {
+    document.getElementById("importCompleteDialog").close();
+    state.ledgerView = "list";
+    state.filter = "all";
+    state.filterTouched = true;
+    render();
+    go("transactions");
+  });
+
+  document.getElementById("importCompleteHistoryButton").addEventListener("click", function () {
+    document.getElementById("importCompleteDialog").close();
+    state.ledgerView = "history";
+    render();
+    go("transactions");
+  });
 
   document.getElementById("meSharePercent").addEventListener("input", function (event) {
     updateSharePreview(event.target.value);
@@ -3048,6 +3299,7 @@
 
   document.getElementById("monthSelect").addEventListener("change", function (event) {
     state.currentMonth = event.target.value;
+    state.filter = "all";
     state.filterTouched = false;
     setDefaultEntryDates(true);
     render();
@@ -3220,7 +3472,7 @@
     });
   });
 
-  document.querySelectorAll(".chip").forEach(function (button) {
+  document.querySelectorAll(".chip[data-filter]").forEach(function (button) {
     button.addEventListener("click", function () {
       document.querySelectorAll(".chip").forEach(function (x) {
         x.classList.remove("active");
@@ -3525,11 +3777,14 @@
   function reset() {
     state.data = null;
     state.started = false;
-    state.filter = "unsorted";
+    state.filter = "all";
     state.filterTouched = false;
+    state.ledgerView = "list";
     state.currentClassifyId = null;
     state.csvRows = [];
+    state.csvIgnoredCount = 0;
     state.importFileType = "csv";
+    state.importFileName = "";
     state.currentMonth = defaultMonthKey();
     state.analysisStartMonth = null;
     state.analysisEndMonth = null;
