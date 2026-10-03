@@ -2510,10 +2510,10 @@
     if (emptyMessage) emptyMessage.textContent = emptyMessages[state.filter] || "";
     if (emptyEl) emptyEl.classList.toggle("hidden", filtered.length > 0);
     document.querySelectorAll(".ledger-empty-actions").forEach(function (actions) {
-      actions.classList.toggle("hidden", ledgerTx.length > 0);
+      actions.classList.add("hidden");
     });
     document.querySelectorAll(".ledger-actions").forEach(function (actions) {
-      actions.classList.toggle("hidden", ledgerTx.length === 0);
+      actions.classList.remove("hidden");
     });
     renderLatestImportSummary();
     renderImportHistory();
