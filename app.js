@@ -1647,8 +1647,16 @@
 
   function resetCsvImport() {
     state.csvRows = [];
+    state.csvIgnoredCount = 0;
+    state.importFileName = "";
     var company = document.getElementById("csvCardCompany");
     if (company) company.value = "";
+    var cardName = document.getElementById("csvCardName");
+    if (cardName) cardName.value = "";
+    var last4 = document.getElementById("csvCardLast4");
+    if (last4) last4.value = "";
+    var targetMonth = document.getElementById("csvTargetMonth");
+    if (targetMonth) targetMonth.value = state.currentMonth;
     var input = document.getElementById("csvFileInput");
     if (input) input.value = "";
     var review = document.getElementById("csvReviewArea");
@@ -1656,7 +1664,7 @@
     var message = document.getElementById("csvFileMessage");
     if (message) {
       message.classList.remove("error");
-      message.textContent = "まだファイルは選ばれていません。";
+      message.textContent = "先にカード会社を選んでください。";
     }
   }
 
@@ -3140,9 +3148,15 @@
 
   document.getElementById("csvCardCompany").addEventListener("change", function () {
     state.csvRows = [];
+    state.csvIgnoredCount = 0;
+    state.importFileName = "";
     var input = document.getElementById("csvFileInput");
     var review = document.getElementById("csvReviewArea");
     var message = document.getElementById("csvFileMessage");
+    var cardName = document.getElementById("csvCardName");
+    if (cardName) {
+      cardName.value = this.value === "rakuten" ? "楽天カード" : this.value === "epos" ? "エポスカード" : "";
+    }
     if (input) input.value = "";
     if (review) review.classList.add("hidden");
     if (message) {
@@ -3155,6 +3169,10 @@
     }
   });
 
+  document.getElementById("csvCardLast4").addEventListener("input", function () {
+    this.value = this.value.replace(/\D/g, "").slice(0, 4);
+  });
+
   document.getElementById("csvFileInput").addEventListener("change", async function (event) {
     var file = event.target.files && event.target.files[0];
     var message = document.getElementById("csvFileMessage");
@@ -3162,6 +3180,8 @@
     var cardCompany = document.getElementById("csvCardCompany").value;
 
     state.csvRows = [];
+    state.csvIgnoredCount = 0;
+    state.importFileName = file ? file.name : "";
     review.classList.add("hidden");
     message.classList.remove("error");
 
@@ -3203,6 +3223,7 @@
       }
 
       state.csvRows = parsed.rows;
+      state.csvIgnoredCount = Number(parsed.ignored || 0);
 
       if (!state.csvRows.length) {
         throw new Error("登録できる明細が見つかりませんでした。");
@@ -3240,6 +3261,23 @@
     if (!selected.length) return;
 
     var payer = document.getElementById("csvPayer").value;
+    var provider = document.getElementById("csvCardCompany").value;
+    var cardName = document.getElementById("csvCardName").value.trim();
+    var cardLast4 = document.getElementById("csvCardLast4").value.trim();
+    var targetMonth = document.getElementById("csvTargetMonth").value;
+    if (!provider || !cardName || !targetMonth) {
+      alert("カード会社・カード名・何月分かを確認してください。");
+      return;
+    }
+    if (targetMonth < OPERATION_START_MONTH) {
+      alert(fullMonthLabel(OPERATION_START_MONTH) + "より前の明細は取込対象外です。");
+      return;
+    }
+    if (cardLast4 && !/^\d{4}$/.test(cardLast4)) {
+      alert("カード番号下4桁は4桁の数字で入力してください。");
+      return;
+    }
+
     var button = document.getElementById("csvImportButton");
     var originalText = button.textContent;
     button.disabled = true;
@@ -3256,36 +3294,70 @@
         payer:payer,
         memo:state.importFileType === "pdf" ? "PDF取込" : "CSV取込",
         source:state.importFileType === "pdf" ? "pdf" : "csv",
-        card_provider:document.getElementById("csvCardCompany").value || null,
-        card_label:document.getElementById("csvCardCompany").value === "rakuten"
-          ? "楽天カード"
-          : "エポスカード"
+        card_provider:provider,
+        card_label:cardName
       };
     });
 
+    var duplicateExcluded = state.csvRows.filter(function (row) {
+      return row.duplicate && !(row.selected && !row.disabled);
+    }).length;
+    var totalAmount = selected.reduce(function (sum, row) {
+      return sum + Number(row.amount || 0);
+    }, 0);
+    var batchMeta = {
+      target_month:targetMonth,
+      file_name:state.importFileName || "card-statement." + state.importFileType,
+      source_format:state.importFileType,
+      read_count:state.csvRows.length + state.csvIgnoredCount,
+      duplicate_count:duplicateExcluded,
+      error_count:state.csvIgnoredCount,
+      total_amount:totalAmount,
+      card:{
+        owner:payer,
+        provider:provider,
+        name:cardName,
+        last4:cardLast4 || null
+      }
+    };
+
     try {
-      await window.kakeiboDb.importCsvTransactions(payload);
+      var importResult = await window.kakeiboDb.importCsvTransactions(payload, batchMeta);
 
       var importedMonths = selected.map(function (row) {
         return monthKeyFromDate(row.date);
       }).filter(Boolean).sort();
       var latestImportedMonth = importedMonths.length
         ? importedMonths[importedMonths.length - 1]
-        : state.currentMonth;
+        : targetMonth;
 
       state.data = await window.kakeiboDb.getInitialData();
       state.currentMonth = latestImportedMonth;
-      state.filterTouched = false;
+      state.filter = "all";
+      state.filterTouched = true;
+      state.ledgerView = "list";
       initMonthSelect();
       setDefaultEntryDates(true);
       render();
+
+      var batch = importResult && importResult.batch;
+      var complete = document.getElementById("importCompleteContent");
+      if (complete) {
+        complete.innerHTML =
+          '<div class="import-detail-hero"><strong>' + escapeHtml(targetMonthDisplay(batch && batch.target_month || targetMonth)) + '</strong>' +
+          '<span>' + escapeHtml(cardDisplay(batch && batch.card, cardName + (cardLast4 ? " ****" + cardLast4 : ""))) + '</span></div>' +
+          '<div class="import-result-grid">' +
+            '<div><strong>' + selected.length + '件</strong><span>登録</span></div>' +
+            '<div><strong>' + duplicateExcluded + '件</strong><span>重複除外</span></div>' +
+            '<div><strong>' + state.csvIgnoredCount + '件</strong><span>エラー</span></div>' +
+            '<div><strong>' + yen(totalAmount) + '</strong><span>合計</span></div>' +
+          '</div>';
+      }
+
       document.getElementById("csvImportDialog").close();
       resetCsvImport();
       go("transactions");
-      alert(
-        selected.length + "件を家計簿に反映しました。" +
-        (latestImportedMonth ? " " + monthLabel(latestImportedMonth) + "を表示します。" : "")
-      );
+      document.getElementById("importCompleteDialog").showModal();
     } catch (error) {
       console.error(error);
       button.disabled = false;
@@ -3293,7 +3365,7 @@
       var importMessage = String((error && error.message) || "");
       alert(importMessage.indexOf("SETTLED_MONTH_LOCKED") !== -1
         ? "精算済みの月の明細が含まれているため、保存できませんでした（1件も反映されていません）。画面を再読み込みすると対象の明細が選択不可になります。"
-        : "CSV明細を保存できませんでした。");
+        : (importMessage || "カード明細を保存できませんでした。"));
     }
   });
 
