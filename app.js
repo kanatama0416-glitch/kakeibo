@@ -138,6 +138,107 @@
     return saved || fallback[categoryName] || "🏷️";
   }
 
+  var CATEGORY_EMOJI_OPTIONS = [
+    "🛒","🥦","🍚","🍔","☕","🧴","🧻","🧹","💡","💧",
+    "🔥","📱","🏠","🪑","🚃","🚗","⛽","🏥","💊","👗",
+    "🎁","🎮","✈️","🐶","🐱","💰","🧾","🏷️"
+  ];
+  var categoryEmojiTarget = null;
+
+  function ensureCategoryEmojiPicker() {
+    var dialog = document.getElementById("categoryEmojiPickerDialog");
+    if (dialog) return dialog;
+
+    dialog = document.createElement("dialog");
+    dialog.id = "categoryEmojiPickerDialog";
+    dialog.className = "category-emoji-picker-dialog";
+    dialog.innerHTML =
+      '<div class="category-emoji-picker-card">' +
+        '<div class="dialog-head"><h3>絵文字を選ぶ</h3>' +
+          '<button type="button" data-emoji-picker-close aria-label="閉じる">×</button></div>' +
+        '<div class="category-emoji-grid">' +
+          CATEGORY_EMOJI_OPTIONS.map(function (emoji) {
+            return '<button type="button" class="category-emoji-option" data-category-emoji="' +
+              escapeHtml(emoji) + '" aria-label="' + escapeHtml(emoji) + '">' +
+              escapeHtml(emoji) + '</button>';
+          }).join("") +
+        '</div>' +
+        '<label class="category-emoji-custom-label">好きな絵文字' +
+          '<input id="categoryEmojiCustomInput" type="text" maxlength="16" placeholder="例：🍰" aria-label="好きな絵文字">' +
+        '</label>' +
+        '<div class="category-emoji-actions">' +
+          '<button type="button" class="soft-button" data-emoji-clear>絵文字なし</button>' +
+          '<button type="button" class="primary-button" data-emoji-apply>これにする</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(dialog);
+
+    dialog.querySelectorAll("[data-category-emoji]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        if (!categoryEmojiTarget) return;
+        categoryEmojiTarget.value = button.getAttribute("data-category-emoji") || "";
+        categoryEmojiTarget.dispatchEvent(new Event("input", { bubbles:true }));
+        categoryEmojiTarget.dispatchEvent(new Event("change", { bubbles:true }));
+        dialog.close();
+      });
+    });
+
+    dialog.querySelector("[data-emoji-apply]").addEventListener("click", function () {
+      if (!categoryEmojiTarget) return;
+      var customInput = document.getElementById("categoryEmojiCustomInput");
+      categoryEmojiTarget.value = customInput ? customInput.value.trim() : "";
+      categoryEmojiTarget.dispatchEvent(new Event("input", { bubbles:true }));
+      categoryEmojiTarget.dispatchEvent(new Event("change", { bubbles:true }));
+      dialog.close();
+    });
+
+    dialog.querySelector("[data-emoji-clear]").addEventListener("click", function () {
+      if (!categoryEmojiTarget) return;
+      categoryEmojiTarget.value = "";
+      categoryEmojiTarget.dispatchEvent(new Event("input", { bubbles:true }));
+      categoryEmojiTarget.dispatchEvent(new Event("change", { bubbles:true }));
+      dialog.close();
+    });
+
+    dialog.querySelector("[data-emoji-picker-close]").addEventListener("click", function () {
+      dialog.close();
+    });
+
+    dialog.addEventListener("close", function () {
+      categoryEmojiTarget = null;
+    });
+
+    return dialog;
+  }
+
+  function openCategoryEmojiPicker(input) {
+    if (!input) return;
+    categoryEmojiTarget = input;
+    var dialog = ensureCategoryEmojiPicker();
+    var customInput = dialog.querySelector("#categoryEmojiCustomInput");
+    if (customInput) customInput.value = input.value || "";
+    if (!dialog.open) dialog.showModal();
+  }
+
+  function bindCategoryEmojiInputs() {
+    document.querySelectorAll(".category-icon-input").forEach(function (input) {
+      input.readOnly = true;
+      input.setAttribute("aria-haspopup", "dialog");
+      input.title = "タップして絵文字を選ぶ";
+      if (input.dataset.emojiPickerBound === "true") return;
+      input.dataset.emojiPickerBound = "true";
+      input.addEventListener("click", function () {
+        openCategoryEmojiPicker(input);
+      });
+      input.addEventListener("keydown", function (event) {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openCategoryEmojiPicker(input);
+        }
+      });
+    });
+  }
+
   function iconFor(tx) {
     if (tx.status === "refunded" || Number(tx.amount || 0) < 0) return "↩";
     if (tx.status === "unclassified" || !tx.category_name) return "?";
@@ -1828,6 +1929,7 @@
           escapeHtml(tx.merchant_name) + '</span><strong>' + yen(tx.amount) + '</strong></button>';
       }).join("") + '</div>' : '<p class="ledger-empty">この取込に紐づく明細はありません。</p>');
     document.getElementById("importBatchDialog").showModal();
+    bindCategoryEmojiInputs();
     bindDynamicButtons();
   }
 
