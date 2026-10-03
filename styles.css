@@ -603,3 +603,18 @@ html,body,.app-shell{max-width:100%;overflow-x:hidden}
   .category-manage-row{grid-template-columns:46px minmax(0,1fr) auto}
   .category-manage-row .settings-mini-button.danger{grid-column:2 / 4}
 }
+
+
+/* Category emoji picker */
+.category-icon-input{cursor:pointer;text-align:center;font-size:20px}
+.category-emoji-picker-dialog{border:0;padding:0;background:transparent;max-width:none}
+.category-emoji-picker-dialog::backdrop{background:rgba(31,39,45,.34);backdrop-filter:blur(2px)}
+.category-emoji-picker-card{width:min(360px,calc(100vw - 28px));max-height:min(620px,calc(100dvh - 40px));overflow:auto;background:#fff;border:1px solid var(--line);border-radius:24px;padding:18px;box-shadow:0 18px 55px rgba(31,39,45,.2)}
+.category-emoji-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin:8px 0 18px}
+.category-emoji-option{aspect-ratio:1;border:1px solid var(--line);border-radius:13px;background:#f8f9fa;font-size:23px;line-height:1;display:grid;place-items:center;padding:0}
+.category-emoji-option:active{transform:scale(.96);background:#eef5f1}
+.category-emoji-custom-label{display:block;font-size:12px;font-weight:900;color:var(--text)}
+.category-emoji-custom-label input{width:100%;margin-top:7px;text-align:center;font-size:24px}
+.category-emoji-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+.category-emoji-actions .soft-button,.category-emoji-actions .primary-button{margin:0}
+@media(max-width:380px){.category-emoji-grid{grid-template-columns:repeat(6,1fr)}}
