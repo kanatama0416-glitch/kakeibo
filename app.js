@@ -63,7 +63,8 @@
 
   var state = {
     data: null,
-    filter: "all",
+    filter: "unsorted",
+    filterTouched: false,
     currentClassifyId: null,
     csvRows: [],
     importFileType: "csv",
@@ -86,7 +87,32 @@
   }
 
   function scopeLabel(scope) {
-    return scope === "shared" ? "共同" : scope === "mine" ? "にゃち個人" : scope === "partner" ? "うー個人" : "未設定";
+    return scope === "shared" ? "共同" : (scope === "mine" || scope === "partner") ? "対象外" : "未設定";
+  }
+
+  // 画面上は「共同 / 対象外」の2区分。DBの制約（shared/mine/partner）は維持し、
+  // 対象外は支払った人に合わせて mine / partner で保存する。
+  function toUiScope(scope) {
+    if (scope === "shared") return "shared";
+    if (scope === "mine" || scope === "partner") return "excluded";
+    return "";
+  }
+
+  function toDbScope(uiScope, payer) {
+    if (uiScope === "shared") return "shared";
+    if (uiScope === "excluded" || uiScope === "mine" || uiScope === "partner") {
+      return payer === "partner" ? "partner" : "mine";
+    }
+    return null;
+  }
+
+  function isUnsortedTx(tx) {
+    return tx.status === "unclassified" || !tx.scope;
+  }
+
+  function ledgerBucket(tx) {
+    if (isUnsortedTx(tx)) return "unsorted";
+    return tx.scope === "shared" ? "shared" : "excluded";
   }
 
   function payerLabel(payer) {
@@ -611,7 +637,7 @@
     manualMerchantSelectedValue = normalizeMerchant(rule.merchant_name || "");
     if (rule.mode === "auto") {
       if (rule.category_name) document.getElementById("manualExpenseCategory").value = rule.category_name;
-      document.getElementById("manualExpenseScope").value = rule.scope || "shared";
+      document.getElementById("manualExpenseScope").value = toUiScope(rule.scope) || "shared";
     }
     hideManualMerchantSuggestions();
   }
@@ -2256,12 +2282,29 @@
       .sort(function (a,b) { return b.date.localeCompare(a.date); }).slice(0,5);
     document.getElementById("recentTransactions").innerHTML = recent.map(txRow).join("");
 
-    var filtered = summary.monthTransactions.slice()
+    var ledgerTx = summary.monthTransactions.slice()
       .sort(function (a,b) { return b.date.localeCompare(a.date); });
-    if (state.filter !== "all") {
-      filtered = filtered.filter(function (t) { return t.scope === state.filter; });
+    var bucketCounts = { unsorted:0, shared:0, excluded:0 };
+    ledgerTx.forEach(function (t) { bucketCounts[ledgerBucket(t)] += 1; });
+    if (!state.filterTouched) {
+      state.filter = bucketCounts.unsorted > 0 ? "unsorted" : "shared";
     }
+    var filtered = ledgerTx.filter(function (t) { return ledgerBucket(t) === state.filter; });
+    var chipLabels = { unsorted:"未仕分け", shared:"共同", excluded:"対象外" };
+    document.querySelectorAll(".chip[data-filter]").forEach(function (chip) {
+      var key = chip.getAttribute("data-filter");
+      chip.classList.toggle("active", key === state.filter);
+      chip.textContent = chipLabels[key] + (bucketCounts[key] ? " " + bucketCounts[key] : "");
+    });
     document.getElementById("allTransactions").innerHTML = filtered.map(txRow).join("");
+    var emptyMessages = {
+      unsorted:ledgerTx.length ? "仕分けが必要な明細はありません。" : "この月の明細はまだありません。「カード明細を読み込む」か＋から追加してください。",
+      shared:"共同の生活費として仕分けた明細はありません。",
+      excluded:"対象外にした明細はありません。個人の買い物はここに入り、精算には含まれません。"
+    };
+    var emptyEl = document.getElementById("ledgerEmpty");
+    emptyEl.textContent = emptyMessages[state.filter] || "";
+    emptyEl.classList.toggle("hidden", filtered.length > 0);
 
     var nextMonth = addMonths(state.currentMonth, 1);
     var livingOut = carryOutRecord("living");
@@ -2429,7 +2472,7 @@
     document.getElementById("classifyMerchantName").value = tx.merchant_name || "";
     document.getElementById("classifyAmount").value = String(tx.amount == null ? "" : tx.amount);
     document.getElementById("classifyCategory").value = tx.category_name || "";
-    document.getElementById("classifyScope").value = tx.scope || "shared";
+    document.getElementById("classifyScope").value = toUiScope(tx.scope) || "shared";
     document.getElementById("classifyPayer").value = tx.payer || "me";
     document.getElementById("classifyMemo").value = tx.memo || "";
     document.getElementById("ruleMode").value = "once";
@@ -2507,7 +2550,7 @@
     document.getElementById("merchantRuleDialogTitle").textContent = rule.merchant_name + " のルール";
     document.getElementById("merchantRuleName").value = rule.merchant_name || "";
     document.getElementById("merchantRuleMode").value = rule.mode || "auto";
-    document.getElementById("merchantRuleScope").value = rule.scope || "shared";
+    document.getElementById("merchantRuleScope").value = toUiScope(rule.scope) || "shared";
     if (rule.category_name) {
       document.getElementById("merchantRuleCategory").value = rule.category_name;
     }
@@ -2806,7 +2849,7 @@
       merchant_name:document.getElementById("merchantRuleName").value.trim(),
       mode:mode,
       category_name:mode === "auto" ? document.getElementById("merchantRuleCategory").value : null,
-      scope:document.getElementById("merchantRuleScope").value
+      scope:toDbScope(document.getElementById("merchantRuleScope").value, "me")
     };
     if (!rule.merchant_name || (mode === "auto" && !rule.category_name)) return;
 
@@ -2958,7 +3001,7 @@
         merchant_raw:row.merchant_raw,
         amount:row.amount,
         category_name:row.category_name,
-        scope:row.scope,
+        scope:row.scope ? toDbScope(row.scope, payer) : null,
         payer:payer,
         memo:state.importFileType === "pdf" ? "PDF取込" : "CSV取込",
         source:state.importFileType === "pdf" ? "pdf" : "csv",
@@ -2981,6 +3024,7 @@
 
       state.data = await window.kakeiboDb.getInitialData();
       state.currentMonth = latestImportedMonth;
+      state.filterTouched = false;
       initMonthSelect();
       setDefaultEntryDates(true);
       render();
@@ -3004,6 +3048,7 @@
 
   document.getElementById("monthSelect").addEventListener("change", function (event) {
     state.currentMonth = event.target.value;
+    state.filterTouched = false;
     setDefaultEntryDates(true);
     render();
   });
@@ -3182,6 +3227,7 @@
       });
       button.classList.add("active");
       state.filter = button.getAttribute("data-filter");
+      state.filterTouched = true;
       render();
     });
   });
@@ -3230,7 +3276,7 @@
       merchant_name:document.getElementById("classifyMerchantName").value.trim(),
       amount:Number(document.getElementById("classifyAmount").value || 0),
       category_name:document.getElementById("classifyCategory").value,
-      scope:document.getElementById("classifyScope").value,
+      scope:toDbScope(document.getElementById("classifyScope").value, document.getElementById("classifyPayer").value),
       payer:document.getElementById("classifyPayer").value,
       memo:document.getElementById("classifyMemo").value.trim()
     };
@@ -3316,7 +3362,7 @@
       merchant_name:document.getElementById("manualExpenseName").value.trim(),
       amount:Number(document.getElementById("manualExpenseAmount").value || 0),
       category_name:document.getElementById("manualExpenseCategory").value,
-      scope:document.getElementById("manualExpenseScope").value,
+      scope:toDbScope(document.getElementById("manualExpenseScope").value, document.getElementById("manualExpensePayer").value),
       payer:document.getElementById("manualExpensePayer").value,
       memo:document.getElementById("manualExpenseMemo").value.trim()
     };
@@ -3479,7 +3525,8 @@
   function reset() {
     state.data = null;
     state.started = false;
-    state.filter = "all";
+    state.filter = "unsorted";
+    state.filterTouched = false;
     state.currentClassifyId = null;
     state.csvRows = [];
     state.importFileType = "csv";

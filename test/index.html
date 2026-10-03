@@ -145,19 +145,19 @@
       <section class="screen" data-screen="transactions">
         <div class="page-heading">
           <h2>明細</h2>
-          <p>生活費と個人支出をまとめて確認</p>
+          <p>取り込んだ明細を「共同」か「対象外」に仕分け</p>
         </div>
         <div class="csv-import-mascot-wrap">
           <button type="button" class="soft-button csv-import-open" data-open="csvImportDialog">カード明細を読み込む</button>
           <img class="content-mascot receipt-runner-mascot" src="../assets/mascot-receipt.webp?v=20260927-1" alt="" aria-hidden="true">
         </div>
         <div class="chips">
-          <button class="chip active" data-filter="all">すべて</button>
+          <button class="chip active" data-filter="unsorted">未仕分け</button>
           <button class="chip" data-filter="shared">共同</button>
-          <button class="chip" data-filter="mine">にゃち</button>
-          <button class="chip" data-filter="partner">うー</button>
+          <button class="chip" data-filter="excluded">対象外</button>
         </div>
         <div id="allTransactions" class="transaction-list"></div>
+        <p id="ledgerEmpty" class="ledger-empty hidden"></p>
       </section>
 
       <section class="screen" data-screen="analysis">
@@ -367,8 +367,7 @@
       <label>支出区分
         <select id="merchantRuleScope">
           <option value="shared">共同生活費</option>
-          <option value="mine">にゃち個人</option>
-          <option value="partner">うー個人</option>
+          <option value="excluded">対象外（個人の買い物）</option>
         </select>
       </label>
       <button id="merchantRuleSaveButton" class="primary-button" type="submit">保存する</button>
@@ -402,8 +401,7 @@
       <label>支出区分
         <select id="classifyScope">
           <option value="shared">共同生活費</option>
-          <option value="mine">にゃち個人</option>
-          <option value="partner">うー個人</option>
+          <option value="excluded">対象外（個人の買い物）</option>
         </select>
       </label>
       <label>支払った人
@@ -434,8 +432,7 @@
       <label>支出区分
         <select id="manualExpenseScope">
           <option value="shared">共同生活費</option>
-          <option value="mine">にゃち個人</option>
-          <option value="partner">うー個人</option>
+          <option value="excluded">対象外（個人の買い物）</option>
         </select>
       </label>
       <label>支払った人
