@@ -2586,19 +2586,6 @@
           '<span class="tx-edit-label">編集 ›</span></div></button>';
       }).join("");
 
-    var meSharePercent = currentMeSharePercent();
-    document.getElementById("shareSettingSummary").textContent =
-      "にゃち " + meSharePercent + "% / うー " + (100 - meSharePercent) + "%";
-    document.getElementById("categorySettingSummary").textContent =
-      state.data.categories.length
-        ? state.data.categories.slice(0, 4).map(function (x) { return x.name; }).join("・") +
-          (state.data.categories.length > 4 ? " など" : "")
-        : "費目はまだありません";
-    document.getElementById("merchantRuleSummary").textContent =
-      state.data.merchant_rules.length
-        ? state.data.merchant_rules.length + "件のルールを登録中"
-        : "店舗ルールはまだありません";
-
     document.getElementById("merchantRules").innerHTML =
       state.data.merchant_rules.length
         ? state.data.merchant_rules.map(function (r) {
