@@ -1,0 +1,48 @@
+name: Keep Supabase active
+
+on:
+  schedule:
+    # 09:17 JST every day (00:17 UTC)
+    - cron: "17 0 * * *"
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/supabase-keepalive.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    env:
+      SUPABASE_URL: "https://vcokmkljwxuyiytiqtlc.supabase.co"
+      # This is the browser-safe publishable key already used by config.js.
+      SUPABASE_PUBLISHABLE_KEY: "sb_publishable_Ww13dYot4RnKABa3HKUDkQ_50tLWmqa"
+
+    steps:
+      - name: Run lightweight database reads
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for attempt in 1 2 3; do
+            curl --fail --show-error --silent \
+              --retry 2 \
+              --request POST \
+              --header "apikey: ${SUPABASE_PUBLISHABLE_KEY}" \
+              --header "Authorization: Bearer ${SUPABASE_PUBLISHABLE_KEY}" \
+              --header "Content-Type: application/json" \
+              --data '{}' \
+              "${SUPABASE_URL}/rest/v1/rpc/keepalive" \
+              > /dev/null
+
+            echo "Keepalive database read ${attempt}/3 succeeded"
+
+            if [ "${attempt}" -lt 3 ]; then
+              sleep 2
+            fi
+          done
