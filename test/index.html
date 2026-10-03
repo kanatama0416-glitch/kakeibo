@@ -445,7 +445,11 @@
     <form class="dialog-card" id="manualExpenseForm">
       <div class="dialog-head"><h3>支出を追加</h3><button type="button" data-close-dialog>×</button></div>
       <label>日付<input id="manualExpenseDate" type="date" required></label>
-      <label>店舗・内容<input id="manualExpenseName" type="text" placeholder="例：アルビス / 電気代" required></label>
+      <label for="manualExpenseName">店舗・内容</label>
+      <div class="merchant-autocomplete">
+        <input id="manualExpenseName" type="text" placeholder="例：アルビス / 電気代" autocomplete="off" aria-autocomplete="list" aria-controls="manualExpenseMerchantSuggestions" aria-expanded="false" required>
+        <div id="manualExpenseMerchantSuggestions" class="merchant-suggestions hidden" role="listbox" aria-label="店舗ルールの候補"></div>
+      </div>
       <label>金額<input id="manualExpenseAmount" type="number" step="1" placeholder="3000（返金は -1000）" required></label>
       <label>費目<select id="manualExpenseCategory" required></select></label>
       <label>支出区分
@@ -461,6 +465,12 @@
         </select>
       </label>
       <label>メモ<input id="manualExpenseMemo" type="text" placeholder="任意"></label>
+      <label>この設定
+        <select id="manualExpenseRuleMode">
+          <option value="once">今回だけ</option>
+          <option value="merchant">今後もこの店舗に適用</option>
+        </select>
+      </label>
       <button class="primary-button" value="save">保存する</button>
     </form>
   </dialog>
@@ -523,6 +533,8 @@
 
       <div id="csvReviewArea" class="hidden">
         <div class="csv-summary">
+          <div><strong id="csvReadCount">0件</strong><span>読み込み件数</span></div>
+          <div><strong id="csvReadTotal">¥0</strong><span>読み込み合計</span></div>
           <div><strong id="csvNewCount">0</strong><span>未記入っぽい</span></div>
           <div><strong id="csvDuplicateCount">0</strong><span>記入済み候補</span></div>
         </div>
