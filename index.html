@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=20260927-1508">
   <link rel="icon" type="image/png" href="./apple-touch-icon.png?v=20260927-1508">
   <link rel="manifest" href="./manifest.webmanifest?v=20260927-1508">
-  <link rel="stylesheet" href="./styles.css?v=20261003-LEDGER1">
+  <link rel="stylesheet" href="./styles.css?v=20261003-IMPORTHISTORY1">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -64,13 +64,13 @@
 
   <div id="appShell" class="app-shell hidden">
     <header class="topbar">
-      <div>
+      <div class="topbar-brand">
         <p class="eyebrow">Kakeibo</p>
         <h1>うーにゃち家計</h1>
       </div>
+      <div id="topbarScreenTitle" class="topbar-screen-title hidden">明細</div>
       <div class="header-actions">
         <select id="monthSelect" class="month-pill" aria-label="表示する月"></select>
-        <button id="logoutButton" class="logout-button" type="button">ログアウト</button>
       </div>
     </header>
 
@@ -142,21 +142,37 @@
       </section>
 
       <section class="screen" data-screen="transactions">
-        <div class="page-heading">
-          <h2>明細</h2>
-          <p>取り込んだ明細を「共同」か「対象外」に仕分け</p>
+        <div class="ledger-tabs" role="tablist" aria-label="明細表示">
+          <button type="button" class="ledger-tab active" data-ledger-view="list" role="tab" aria-selected="true">明細一覧</button>
+          <button type="button" class="ledger-tab" data-ledger-view="history" role="tab" aria-selected="false">取込履歴</button>
         </div>
-        <div class="csv-import-mascot-wrap">
-          <button type="button" class="soft-button csv-import-open" data-open="csvImportDialog">カード明細を読み込む</button>
-          <img class="content-mascot receipt-runner-mascot" src="./assets/mascot-receipt.webp?v=20260927-1" alt="" aria-hidden="true">
+
+        <div id="ledgerListView">
+          <button id="latestImportSummary" type="button" class="latest-import-summary hidden"></button>
+          <div class="chips ledger-filters" aria-label="明細の絞り込み">
+            <button class="chip active" data-filter="all">すべて</button>
+            <button class="chip" data-filter="unsorted">未仕分け</button>
+            <button class="chip" data-filter="shared">共同</button>
+            <button class="chip" data-filter="excluded">対象外</button>
+          </div>
+          <div id="allTransactions" class="transaction-list"></div>
+          <div id="ledgerEmpty" class="ledger-empty-state hidden">
+            <p id="ledgerEmptyMessage"></p>
+            <div class="ledger-empty-actions">
+              <button type="button" class="primary-button ledger-action-button" data-open="manualExpenseDialog">＋ 支出を追加</button>
+              <button type="button" class="soft-button ledger-action-button" data-open="csvImportDialog">カード明細を読み込む</button>
+            </div>
+          </div>
+          <div class="ledger-actions">
+            <button type="button" class="primary-button ledger-action-button" data-open="manualExpenseDialog">＋ 支出を追加</button>
+            <button type="button" class="soft-button ledger-action-button" data-open="csvImportDialog">カード明細を読み込む</button>
+          </div>
         </div>
-        <div class="chips">
-          <button class="chip active" data-filter="unsorted">未仕分け</button>
-          <button class="chip" data-filter="shared">共同</button>
-          <button class="chip" data-filter="excluded">対象外</button>
+
+        <div id="importHistoryView" class="hidden">
+          <div id="importHistoryList" class="import-history-list"></div>
+          <p id="importHistoryEmpty" class="ledger-empty hidden">カード明細の取込履歴はまだありません。</p>
         </div>
-        <div id="allTransactions" class="transaction-list"></div>
-        <p id="ledgerEmpty" class="ledger-empty hidden"></p>
       </section>
 
       <section class="screen" data-screen="analysis">
@@ -303,6 +319,7 @@
           <button id="categorySettingsButton" type="button"><span><strong>費目</strong><small id="categorySettingSummary">食費・日用品・光熱費など</small></span><b>›</b></button>
           <button id="merchantSettingsButton" type="button"><span><strong>店舗ルール</strong><small id="merchantRuleSummary">店舗ごとの自動分類を管理</small></span><b>›</b></button>
           <button id="auditHistoryButton" type="button"><span><strong>変更履歴</strong><small>誰が・いつ・何を変更したか確認</small></span><b>›</b></button>
+          <button id="logoutButton" type="button"><span><strong>ログアウト</strong><small>この端末で家計簿からログアウト</small></span><b>›</b></button>
         </div>
 
         <div class="settings-section-head">
@@ -409,6 +426,8 @@
           <option value="partner">うー</option>
         </select>
       </label>
+      <div id="transactionSourceMeta" class="transaction-source-meta"></div>
+      <button id="transactionImportHistoryButton" class="source-link-button hidden" type="button">この取込履歴を見る</button>
       <label>メモ<input id="classifyMemo" type="text" placeholder="任意"></label>
       <label>この設定
         <select id="ruleMode">
@@ -494,6 +513,18 @@
         </select>
       </label>
 
+      <label>カード名
+        <input id="csvCardName" type="text" maxlength="60" placeholder="例：楽天カード">
+      </label>
+
+      <label>カード番号 下4桁（任意）
+        <input id="csvCardLast4" type="text" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="1234">
+      </label>
+
+      <label>何月分？
+        <input id="csvTargetMonth" type="month" required>
+      </label>
+
       <label class="csv-file-label">明細ファイル
         <input id="csvFileInput" type="file" accept=".pdf,.csv,application/pdf,text/csv">
       </label>
@@ -528,6 +559,22 @@
     </div>
   </dialog>
 
+  <dialog id="importBatchDialog">
+    <div class="dialog-card import-batch-dialog">
+      <div class="dialog-head"><h3>取込履歴の詳細</h3><button type="button" data-close-dialog>×</button></div>
+      <div id="importBatchDetail"></div>
+    </div>
+  </dialog>
+
+  <dialog id="importCompleteDialog">
+    <div class="dialog-card import-complete-dialog">
+      <div class="dialog-head"><h3>カード明細を読み込みました</h3><button type="button" data-close-dialog>×</button></div>
+      <div id="importCompleteContent"></div>
+      <button id="importCompleteTransactionsButton" class="primary-button" type="button">取り込んだ明細を見る</button>
+      <button id="importCompleteHistoryButton" class="soft-button import-complete-history-button" type="button">取込履歴を見る</button>
+    </div>
+  </dialog>
+
   <dialog id="repaymentDialog">
     <form method="dialog" class="dialog-card" id="repaymentForm">
       <div class="dialog-head"><h3>この月の返済額</h3><button type="button" data-close-dialog>×</button></div>
@@ -540,8 +587,8 @@
   <script src="./config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="./supabase-client.js?v=20260927-PAYER1"></script>
-  <script src="./app.js?v=20261003-LEDGER1"></script>
+  <script src="./supabase-client.js?v=20261003-IMPORTHISTORY1"></script>
+  <script src="./app.js?v=20261003-IMPORTHISTORY1"></script>
   <script src="./auth.js?v=20260927-INTEGRITY1"></script>
 </body>
 </html>
