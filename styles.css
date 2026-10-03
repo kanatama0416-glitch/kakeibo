@@ -526,7 +526,8 @@ html,body,.app-shell{max-width:100%;overflow-x:hidden}
 .app-shell[data-current-screen="transactions"] .topbar-brand{display:none}
 .app-shell[data-current-screen="transactions"] .topbar-screen-title{display:block!important}
 .app-shell[data-current-screen="transactions"] .fab{display:none!important}
-.app-shell[data-current-screen="transactions"][data-ledger-view="history"] .month-pill{display:none}
+.app-shell[data-current-screen="transactions"][data-ledger-view="history"] .month-pill{visibility:hidden;pointer-events:none}
+.app-shell[data-current-screen="transactions"] .topbar{min-height:68px}
 
 .ledger-tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin:3px 0 14px;padding:4px;border-radius:16px;background:#e9ecef}
 .ledger-tab{border:0;border-radius:12px;background:transparent;color:#6f7780;padding:10px 12px;font-size:12px;font-weight:900}
