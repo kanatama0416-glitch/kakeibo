@@ -129,10 +129,19 @@
     return Math.round(value);
   }
 
+  function categoryIcon(categoryName) {
+    var fallback = { "食費":"🛒", "日用品":"🧴", "光熱費":"💡", "外食":"☕", "家具・家電":"🪑", "交通":"🚃", "交通費":"🚃" };
+    var category = (state.data && state.data.categories || []).find(function (item) {
+      return item.name === categoryName;
+    });
+    var saved = category && String(category.icon || "").trim();
+    return saved || fallback[categoryName] || "🏷️";
+  }
+
   function iconFor(tx) {
-    var map = { "食費":"🛒", "日用品":"🧴", "光熱費":"💡", "外食":"☕", "家具・家電":"🪑" };
     if (tx.status === "refunded" || Number(tx.amount || 0) < 0) return "↩";
-    return map[tx.category_name] || (tx.status === "unclassified" ? "?" : "•");
+    if (tx.status === "unclassified" || !tx.category_name) return "?";
+    return categoryIcon(tx.category_name);
   }
 
   function escapeHtml(value) {
@@ -199,7 +208,8 @@
       paid_at:"支払日時",
       source:"取込元",
       card_provider:"カード会社",
-      card_label:"カード名"
+      card_label:"カード名",
+      icon:"絵文字"
     };
     return labels[field] || field;
   }
@@ -1730,13 +1740,14 @@
   }
 
   function ledgerTxRow(tx) {
-    var badge = ledgerBucket(tx) === "unsorted" ? "未仕分け" : ledgerBucket(tx) === "shared" ? "共同" : "対象外";
+    var meta = shortDate(tx.date) + " ・ " + (tx.category_name || "未設定") + " ・ " +
+      scopeLabel(tx.scope) + " ・ 支払：" + payerLabel(tx.payer) + " ・ " + sourceDisplay(tx);
     return '<button type="button" class="transaction-row transaction-edit-row ledger-transaction-row" data-edit-tx="' + tx.id + '">' +
-      '<div class="tx-date">' + escapeHtml(shortDate(tx.date)) + '</div>' +
-      '<div class="tx-main"><strong>' + escapeHtml(tx.merchant_name) + '</strong>' +
-      '<small>' + escapeHtml(payerLabel(tx.payer)) + ' ｜ ' + escapeHtml(sourceDisplay(tx)) + '</small></div>' +
+      '<div class="tx-icon">' + escapeHtml(iconFor(tx)) + '</div>' +
+      '<div class="tx-main"><strong>' + escapeHtml(tx.merchant_name) + '</strong><small>' +
+      escapeHtml(meta) + '</small></div>' +
       '<div class="tx-side"><div class="tx-amount">' + yen(tx.amount) + '</div>' +
-      '<span class="ledger-status ' + ledgerBucket(tx) + '">' + badge + '</span></div></button>';
+      '<span class="tx-edit-label">編集 ›</span></div></button>';
   }
 
   function latestImportBatch() {
@@ -2601,9 +2612,11 @@
 
     document.getElementById("categorySettingsList").innerHTML =
       state.data.categories.map(function (category) {
-        return '<div class="settings-manage-row">' +
+        return '<div class="settings-manage-row category-manage-row">' +
+          '<input class="category-icon-input" type="text" maxlength="16" value="' + escapeHtml(category.icon || categoryIcon(category.name)) +
+          '" data-category-icon="' + category.id + '" aria-label="' + escapeHtml(category.name) + 'の絵文字">' +
           '<input type="text" maxlength="40" value="' + escapeHtml(category.name) +
-          '" data-category-input="' + category.id + '">' +
+          '" data-category-input="' + category.id + '" aria-label="費目名">' +
           '<button type="button" class="settings-mini-button" data-category-save="' + category.id + '">保存</button>' +
           '<button type="button" class="settings-mini-button danger" data-category-delete="' + category.id + '">削除</button>' +
           '</div>';
@@ -2800,11 +2813,13 @@
       button.onclick = async function () {
         var id = Number(button.getAttribute("data-category-save"));
         var input = document.querySelector('[data-category-input="' + id + '"]');
+        var iconInput = document.querySelector('[data-category-icon="' + id + '"]');
         var value = input ? input.value.trim() : "";
+        var icon = iconInput ? iconInput.value.trim() : "";
         if (!value) return;
         button.disabled = true;
         try {
-          await window.kakeiboDb.updateCategory(id, value);
+          await window.kakeiboDb.updateCategory(id, value, icon);
           state.data = await window.kakeiboDb.getInitialData();
           render();
         } catch (error) {
@@ -3078,15 +3093,18 @@
   document.getElementById("categoryAddForm").addEventListener("submit", async function (event) {
     event.preventDefault();
     var input = document.getElementById("newCategoryName");
+    var iconInput = document.getElementById("newCategoryIcon");
     var name = input.value.trim();
+    var icon = iconInput ? iconInput.value.trim() : "";
     if (!name) return;
 
     var button = event.submitter;
     if (button) button.disabled = true;
     try {
-      await window.kakeiboDb.addCategory(name);
+      await window.kakeiboDb.addCategory(name, icon);
       state.data = await window.kakeiboDb.getInitialData();
       input.value = "";
+      if (iconInput) iconInput.value = "";
       render();
     } catch (error) {
       console.error(error);
