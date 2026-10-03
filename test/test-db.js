@@ -17,8 +17,8 @@
       { id:2, merchant_name:"ドラッグストア", category_name:"日用品", scope:"shared", mode:"auto" }
     ],
     transactions: [
-      { id:101, date:"2026-10-03", merchant_name:"スーパー", amount:4200, category_name:"食費", scope:"shared", payer:"me", status:"confirmed", source:"manual", memo:"テスト" },
-      { id:102, date:"2026-10-08", merchant_name:"電気", amount:6800, category_name:"光熱費", scope:"shared", payer:"partner", status:"confirmed", source:"manual", memo:"テスト" },
+      { id:101, date:"2026-10-03", merchant_name:"スーパー", amount:4200, category_name:"食費", scope:"shared", payer:"me", status:"confirmed", source:"csv", memo:"CSV取込", card_provider:"rakuten", card_label:"楽天カード", card_id:1, import_batch_id:1, created_at:"2026-10-03T00:42:00.000Z" },
+      { id:102, date:"2026-10-08", merchant_name:"電気", amount:6800, category_name:"光熱費", scope:"shared", payer:"partner", status:"confirmed", source:"pdf", memo:"PDF取込", card_provider:"epos", card_label:"エポスカード", card_id:2, import_batch_id:2, created_at:"2026-10-12T12:18:00.000Z" },
       { id:103, date:"2026-10-13", merchant_name:"カフェ", amount:1800, category_name:"外食", scope:"mine", payer:"me", status:"confirmed", source:"manual", memo:"テスト" },
       { id:104, date:"2026-10-21", merchant_name:"ドラッグストア", amount:2600, category_name:"日用品", scope:"shared", payer:"me", status:"confirmed", source:"manual", memo:"テスト" },
       { id:105, date:"2026-10-26", merchant_name:"家具", amount:9500, category_name:"家具・家電", scope:"shared", payer:"partner", status:"confirmed", source:"manual", memo:"テスト" },
@@ -55,11 +55,19 @@
       { id:2, repayment_plan_id:1, repayment_month:"2026-11-01", amount:5000 },
       { id:3, repayment_plan_id:1, repayment_month:"2026-12-01", amount:5000 }
     ],
-    repayments: []
+    repayments: [],
+    cards: [
+      { id:1, owner:"me", provider:"rakuten", name:"楽天カード", last4:"1234", created_at:"2026-10-03T00:42:00.000Z" },
+      { id:2, owner:"partner", provider:"epos", name:"エポスカード", last4:"5678", created_at:"2026-10-12T12:18:00.000Z" }
+    ],
+    import_batches: [
+      { id:2, uploader_user_id:"test-partner", uploader_email:"ryu.uver.111@gmail.com", uploaded_at:"2026-10-12T12:18:00.000Z", target_month:"2026-10-01", card_id:2, file_name:"epos_202610.pdf", source_format:"pdf", read_count:12, imported_count:10, duplicate_count:1, error_count:1, total_amount:48320, created_at:"2026-10-12T12:18:00.000Z" },
+      { id:1, uploader_user_id:"test-me", uploader_email:"kanatama0416@gmail.com", uploaded_at:"2026-10-03T00:42:00.000Z", target_month:"2026-10-01", card_id:1, file_name:"rakuten_202610.csv", source_format:"csv", read_count:9, imported_count:8, duplicate_count:1, error_count:0, total_amount:32180, created_at:"2026-10-03T00:42:00.000Z" }
+    ]
   };
 
   var auditLogs = [];
-  var ids = { transaction:1000, initial:100, category:100, rule:100, carry:100, settlement:100, repaymentAmount:100, repayment:100 };
+  var ids = { transaction:1000, initial:100, category:100, rule:100, carry:100, settlement:100, repaymentAmount:100, repayment:100, card:10, batch:10 };
 
   function now() { return new Date().toISOString(); }
   function monthFirst(month) { return month + "-01"; }
@@ -100,12 +108,44 @@
     var row={id:++ids.transaction,date:tx.date,merchant_name:tx.merchant_name,amount:Number(tx.amount),category_name:tx.category_name,scope:tx.scope,payer:tx.payer,status:Number(tx.amount)<0?"refunded":"confirmed",source:"manual",memo:tx.memo||""};
     data.transactions.push(row); log("INSERT","transactions",row.id,null,clone(row)); return clone(row);
   }
-  async function importCsvTransactions(rows) {
+  async function importCsvTransactions(rows, batchMeta) {
+    var meta=batchMeta||{};
+    var cardMeta=meta.card||{};
+    var card=data.cards.find(function(x){
+      return x.owner===(cardMeta.owner||"me") &&
+        x.provider===cardMeta.provider &&
+        x.name===cardMeta.name &&
+        String(x.last4||"")===String(cardMeta.last4||"");
+    });
+    if(!card){
+      card={id:++ids.card,owner:cardMeta.owner||"me",provider:cardMeta.provider||"",name:cardMeta.name||"カード",last4:cardMeta.last4||null,created_at:now()};
+      data.cards.push(card);
+    }
+    var batch={
+      id:++ids.batch,
+      uploader_user_id:"test-me",
+      uploader_email:"kanatama0416@gmail.com",
+      uploaded_at:now(),
+      target_month:String(meta.target_month||"2026-10").slice(0,7)+"-01",
+      card_id:card.id,
+      file_name:meta.file_name||"test.csv",
+      source_format:meta.source_format==="pdf"?"pdf":"csv",
+      read_count:Number(meta.read_count||rows.length),
+      imported_count:rows.length,
+      duplicate_count:Number(meta.duplicate_count||0),
+      error_count:Number(meta.error_count||0),
+      total_amount:Number(meta.total_amount||0),
+      created_at:now()
+    };
+    data.import_batches.unshift(batch);
+    var inserted=[];
     for (var i=0;i<rows.length;i++) {
       var r=rows[i];
-      data.transactions.push({id:++ids.transaction,date:r.date,merchant_name:r.merchant_name,merchant_raw:r.merchant_raw||r.merchant_name,amount:Number(r.amount),category_name:r.category_name||null,scope:r.scope||"shared",payer:r.payer||"me",status:r.category_name?(Number(r.amount)<0?"refunded":"confirmed"):"unclassified",source:r.source||"csv",memo:r.memo||"",card_provider:r.card_provider||null,card_label:r.card_label||null});
+      var row={id:++ids.transaction,date:r.date,merchant_name:r.merchant_name,merchant_raw:r.merchant_raw||r.merchant_name,amount:Number(r.amount),category_name:r.category_name||null,scope:r.scope||"shared",payer:r.payer||"me",status:r.category_name?(Number(r.amount)<0?"refunded":"confirmed"):"unclassified",source:r.source||"csv",memo:r.memo||"",card_provider:card.provider,card_label:card.name,card_id:card.id,import_batch_id:batch.id,created_at:now()};
+      data.transactions.push(row);
+      inserted.push(row);
     }
-    return clone(rows);
+    return {transactions:clone(inserted),batch:Object.assign(clone(batch),{card:clone(card)})};
   }
 
   async function addInitialExpense(expense) {
