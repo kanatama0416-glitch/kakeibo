@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- このファイルは scripts/build-test-html.js が index.html から生成します。直接編集しないでください。 -->
 <html lang="ja">
 <head>
   <meta charset="utf-8">
@@ -10,7 +11,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="../apple-touch-icon.png?v=20260927-1508">
   <link rel="icon" type="image/png" href="../apple-touch-icon.png?v=20260927-1508">
   <link rel="manifest" href="../manifest.webmanifest?v=20260927-1508">
-  <link rel="stylesheet" href="../styles.css?v=20261005-LEDGERCTA1">
+  <link rel="stylesheet" href="../styles.css?v=20261006-REVIEWFIX1">
 </head>
 <body>
   <section id="authGate" class="auth-gate hidden">
@@ -77,6 +78,14 @@
     <div style="margin:0 16px 8px;padding:9px 12px;border-radius:14px;background:#fff4e3;color:#8a5b16;font-size:11px;font-weight:900;border:1px solid #efdbb8">テスト環境｜10月・11月・12月のダミーデータです。本番DBには保存されません。</div>
     <main>
       <section class="screen active" data-screen="home">
+        <article id="importReminderCard" class="import-reminder-card hidden" aria-live="polite">
+          <div class="import-reminder-text">
+            <strong id="importReminderTitle">カード明細を読み込みましょう</strong>
+            <small>まだ取り込んでいないカード</small>
+            <ul id="importReminderList"></ul>
+          </div>
+          <button id="importReminderButton" type="button">読み込む</button>
+        </article>
         <article id="paymentDueCard" class="payment-due-card">
           <div class="payment-due-head">
             <div>
@@ -315,11 +324,12 @@
           <p>費目・店舗ルール・負担割合を管理</p>
         </div>
         <div class="settings-card">
-          <button id="shareSettingsButton" type="button"><span><strong>共同費の基本負担</strong><small id="shareSettingSummary">にゃち 50% / うー 50%</small></span><b>›</b></button>
-          <button id="categorySettingsButton" type="button"><span><strong>費目</strong><small id="categorySettingSummary">食費・日用品・光熱費など</small></span><b>›</b></button>
-          <button id="merchantSettingsButton" type="button"><span><strong>店舗ルール</strong><small id="merchantRuleSummary">店舗ごとの自動分類を管理</small></span><b>›</b></button>
-          <button id="auditHistoryButton" type="button"><span><strong>変更履歴</strong><small>誰が・いつ・何を変更したか確認</small></span><b>›</b></button>
-          <a class="settings-link-row" href="../"><span><strong>本番へ戻る</strong><small>本番の家計簿を開く</small></span><b>›</b></a>
+          <button id="shareSettingsButton" type="button"><span><strong>共同費の基本負担</strong></span><b>›</b></button>
+          <button id="cardSettingsButton" type="button"><span><strong>カード</strong></span><b>›</b></button>
+          <button id="categorySettingsButton" type="button"><span><strong>費目</strong></span><b>›</b></button>
+          <button id="merchantSettingsButton" type="button"><span><strong>店舗ルール</strong></span><b>›</b></button>
+          <button id="auditHistoryButton" type="button"><span><strong>変更履歴</strong></span><b>›</b></button>
+          <a class="settings-link-row" href="../"><span><strong>本番へ戻る</strong></span><b>›</b></a>
         </div>
 
         <div class="settings-section-head">
@@ -354,6 +364,14 @@
       </div>
       <button class="primary-button" type="submit">保存する</button>
     </form>
+  </dialog>
+
+  <dialog id="cardSettingsDialog">
+    <div class="dialog-card settings-dialog-scroll">
+      <div class="dialog-head"><h3>カード</h3><button type="button" data-close-dialog>×</button></div>
+      <p class="settings-help">カード名と番号下4桁を直せます。</p>
+      <div id="cardSettingsList" class="settings-manage-list"></div>
+    </div>
   </dialog>
 
   <dialog id="categorySettingsDialog">
@@ -588,8 +606,8 @@
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
   <script>window.KAKEIBO_TEST_MODE = true;</script>
-  <script src="./test-db.js?v=20261003-CATEGORYEMOJI1"></script>
-  <script src="../app.js?v=20261005-CARDCHOICE1"></script>
+  <script src="./test-db.js?v=20261006-REVIEWFIX1"></script>
+  <script src="../app.js?v=20261006-REVIEWFIX1"></script>
   <script>
     window.KakeiboApp.start().catch(function (error) {
       console.error(error);

@@ -60,9 +60,13 @@
       { id:1, owner:"me", provider:"rakuten", name:"楽天カード", last4:"1234", created_at:"2026-10-03T00:42:00.000Z" },
       { id:2, owner:"partner", provider:"epos", name:"エポスカード", last4:"5678", created_at:"2026-10-12T12:18:00.000Z" }
     ],
+    members: [
+      { member_key:"me", display_name:"にゃち", email:"me@example.com" },
+      { member_key:"partner", display_name:"うー", email:"partner@example.com" }
+    ],
     import_batches: [
-      { id:2, uploader_user_id:"test-partner", uploader_email:"ryu.uver.111@gmail.com", uploaded_at:"2026-10-12T12:18:00.000Z", target_month:"2026-10-01", card_id:2, file_name:"epos_202610.pdf", source_format:"pdf", read_count:12, imported_count:10, duplicate_count:1, error_count:1, total_amount:48320, created_at:"2026-10-12T12:18:00.000Z" },
-      { id:1, uploader_user_id:"test-me", uploader_email:"kanatama0416@gmail.com", uploaded_at:"2026-10-03T00:42:00.000Z", target_month:"2026-10-01", card_id:1, file_name:"rakuten_202610.csv", source_format:"csv", read_count:9, imported_count:8, duplicate_count:1, error_count:0, total_amount:32180, created_at:"2026-10-03T00:42:00.000Z" }
+      { id:2, uploader_user_id:"test-partner", uploader_email:"partner@example.com", uploaded_at:"2026-10-12T12:18:00.000Z", target_month:"2026-10-01", card_id:2, file_name:"epos_202610.pdf", source_format:"pdf", read_count:12, imported_count:10, duplicate_count:1, error_count:1, total_amount:48320, created_at:"2026-10-12T12:18:00.000Z" },
+      { id:1, uploader_user_id:"test-me", uploader_email:"me@example.com", uploaded_at:"2026-10-03T00:42:00.000Z", target_month:"2026-10-01", card_id:1, file_name:"rakuten_202610.csv", source_format:"csv", read_count:9, imported_count:8, duplicate_count:1, error_count:0, total_amount:32180, created_at:"2026-10-03T00:42:00.000Z" }
     ]
   };
 
@@ -124,7 +128,7 @@
     var batch={
       id:++ids.batch,
       uploader_user_id:"test-me",
-      uploader_email:"kanatama0416@gmail.com",
+      uploader_email:"me@example.com",
       uploaded_at:now(),
       target_month:String(meta.target_month||"2026-10").slice(0,7)+"-01",
       card_id:card.id,
@@ -193,6 +197,27 @@
     else {row.amount=Number(amount);row.updated_at=now();}
     return clone(row);
   }
+  async function updateCard(id, fields) {
+    var card=data.cards.find(function(x){return Number(x.id)===Number(id);});
+    if(!card) throw new Error("not found");
+    var name=String((fields&&fields.name)||"").trim();
+    var last4=String((fields&&fields.last4)||"").trim();
+    if(!name) throw new Error("CARD_NAME_REQUIRED");
+    if(last4 && !/^\d{4}$/.test(last4)) throw new Error("CARD_LAST4_INVALID");
+    var before=clone(card);
+    card.name=name; card.last4=last4||null;
+    data.transactions.forEach(function(t){ if(Number(t.card_id)===Number(id)) t.card_label=name; });
+    log("UPDATE","cards",id,before,clone(card));
+    return clone(card);
+  }
+  async function deleteCard(id) {
+    if(data.import_batches.some(function(b){return Number(b.card_id)===Number(id);})){
+      var err=new Error('update or delete on table "cards" violates foreign key constraint');
+      err.code="23503"; throw err;
+    }
+    var i=data.cards.findIndex(function(x){return Number(x.id)===Number(id);});
+    if(i>=0){var before=data.cards[i];data.cards.splice(i,1);log("DELETE","cards",id,clone(before),null);}
+  }
   async function markSettlementPaid(settlementMonth, amount, planId, repaymentAmount) {
     data.settlements=data.settlements.filter(function(x){return String(x.settlement_month).slice(0,7)!==settlementMonth;});
     data.settlements.push({id:++ids.settlement,settlement_month:monthFirst(settlementMonth),amount:Number(amount),paid_at:now(),created_at:now(),updated_at:now()});
@@ -225,6 +250,8 @@
     saveMerchantRule:saveMerchantRule,
     deleteMerchantRule:deleteMerchantRule,
     saveMonthlyRepaymentAmount:saveMonthlyRepaymentAmount,
+    updateCard:updateCard,
+    deleteCard:deleteCard,
     markSettlementPaid:markSettlementPaid,
     undoSettlementPaid:undoSettlementPaid
   };

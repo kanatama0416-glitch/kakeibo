@@ -147,6 +147,15 @@
       if (index !== 2 && r.error) throw r.error;
     });
 
+    // メンバー表（表示名とメールの対応）。未設定・取得失敗でもアプリは既定の名前で動かす。
+    var members = [];
+    try {
+      var memberResult = await client.rpc("kakeibo_members");
+      if (!memberResult.error) members = memberResult.data || [];
+    } catch (error) {
+      console.warn(error);
+    }
+
     return {
       categories: results[0].data || [],
       merchant_rules: (results[1].data || []).map(function (r) {
@@ -230,7 +239,8 @@
         };
       }),
       cards: results[10].data || [],
-      import_batches: results[11].data || []
+      import_batches: results[11].data || [],
+      members: members
     };
   }
 
@@ -659,6 +669,25 @@
     return result.data;
   }
 
+  async function updateCard(id, fields) {
+    var name = String((fields && fields.name) || "").trim();
+    var last4 = String((fields && fields.last4) || "").trim();
+    if (!name) throw new Error("CARD_NAME_REQUIRED");
+    if (last4 && !/^\d{4}$/.test(last4)) throw new Error("CARD_LAST4_INVALID");
+    var result = await client.from("cards")
+      .update({ name:name, last4:last4 || null })
+      .eq("id", id)
+      .select("id,owner,provider,name,last4,created_at")
+      .single();
+    if (result.error) throw result.error;
+    return result.data;
+  }
+
+  async function deleteCard(id) {
+    var result = await client.from("cards").delete().eq("id", id);
+    if (result.error) throw result.error;
+  }
+
   async function markSettlementPaid(settlementMonth, amount, planId, repaymentAmount) {
     var result = await client.rpc("kakeibo_mark_settlement_paid", {
       p_settlement_month:settlementMonth + "-01",
@@ -723,6 +752,8 @@
     saveMerchantRule: saveMerchantRule,
     deleteMerchantRule: deleteMerchantRule,
     saveMonthlyRepaymentAmount: saveMonthlyRepaymentAmount,
+    updateCard: updateCard,
+    deleteCard: deleteCard,
     markSettlementPaid: markSettlementPaid,
     undoSettlementPaid: undoSettlementPaid
   };

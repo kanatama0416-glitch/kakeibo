@@ -5,7 +5,6 @@
 -- 3) メンバー（にゃち / うー）の対応表を private.allowed_users に持たせ、
 --    コードにメールアドレスを書かずに表示名を引けるようにする。
 -- 4) 精算額をDBでも再計算し、画面の金額と一致しない場合は記録しない。
--- 5) 運用開始（2026年10月）前のカード明細はDBでも受け付けない。
 
 -- 1) grants -----------------------------------------------------------------
 do $$
@@ -355,10 +354,3 @@ $$;
 
 revoke all on function public.kakeibo_mark_settlement_paid(date, integer, bigint, integer) from public, anon;
 grant execute on function public.kakeibo_mark_settlement_paid(date, integer, bigint, integer) to authenticated;
-
--- 5) pre-operation card statements ---------------------------------------
-alter table public.transactions
-  drop constraint if exists transactions_card_import_after_start_check;
-alter table public.transactions
-  add constraint transactions_card_import_after_start_check
-  check (source not in ('csv','pdf') or transaction_date >= date '2026-10-01');

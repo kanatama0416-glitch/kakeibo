@@ -30,6 +30,10 @@ jobs:
           enablement: true
 
       # 本番アプリに加え、ダミーデータだけを使う画面確認用 test/ も配信する。
+      # test/index.html は index.html から生成する（手作業の同期漏れを防ぐ）。
+      - name: Build test page from index.html
+        run: node scripts/build-test-html.js
+
       - name: Collect site files
         run: |
           mkdir -p _site/assets _site/test

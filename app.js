@@ -118,8 +118,17 @@
     return tx.scope === "shared" ? "shared" : "excluded";
   }
 
+  var DEFAULT_MEMBER_NAMES = { me:"にゃち", partner:"うー" };
+
+  // 表示名は DB の kakeibo_members() から取得する。取得できないときは従来の名前を使う。
+  function memberName(key) {
+    var members = (state.data && state.data.members) || [];
+    var member = members.find(function (m) { return m.member_key === key; });
+    return (member && member.display_name) || DEFAULT_MEMBER_NAMES[key] || "";
+  }
+
   function payerLabel(payer) {
-    return payer === "me" ? "にゃち" : payer === "partner" ? "うー" : "未設定";
+    return payer === "me" || payer === "partner" ? memberName(payer) : "未設定";
   }
 
   function currentMeSharePercent() {
@@ -253,9 +262,11 @@
 
   function auditActorLabel(log) {
     var email = String((log && log.actor_email) || "").toLowerCase();
-    if (email === "kanatama0416@gmail.com") return "にゃち";
-    if (email === "ryu.uver.111@gmail.com") return "うー";
-    return email || "システム";
+    if (!email) return "システム";
+    var member = ((state.data && state.data.members) || []).find(function (m) {
+      return String(m.email || "").toLowerCase() === email;
+    });
+    return member ? memberName(member.member_key) : email;
   }
 
   function auditActionLabel(action) {
@@ -296,7 +307,7 @@
       original_amount:"元の金額",
       remaining_amount:"残額",
       monthly_amount:"毎月の返済額",
-      me_share_percent:"にゃちの負担割合",
+      me_share_percent:DEFAULT_MEMBER_NAMES.me + "の負担割合",
       category_id:"費目",
       category:"区分",
       scope:"支出区分",
@@ -316,7 +327,7 @@
   }
 
   function auditPersonValue(value) {
-    return value === "me" ? "にゃち" : value === "partner" ? "うー" : value;
+    return value === "me" || value === "partner" ? memberName(value) : value;
   }
 
   function auditValueLabel(field, value) {
@@ -627,9 +638,12 @@
     return Math.abs(aTime - bTime) / 86400000;
   }
 
-  function findCsvExistingMatch(row) {
+  // claimed：同じファイル内の別の行がすでに「登録済み」と対応づけた明細ID。
+  // 1件の登録済み明細に、ファイル内の複数行が重複扱いでぶら下がらないようにする。
+  function findCsvExistingMatch(row, claimed) {
     var merchantKey = normalizeMerchant(row.merchant_name);
     var matchCandidates = state.data.transactions.filter(function (tx) {
+      if (claimed && claimed[tx.id]) return false;
       return normalizeText(tx.memo).indexOf("現金") === -1;
     });
 
@@ -671,6 +685,25 @@
     }
 
     return null;
+  }
+
+  // 取込行の重複判定。
+  // ・登録済みの明細と一致 → 重複として外す（1件の登録済み明細に対応づけるのは1行だけ）
+  // ・同じファイル内に同じ日・金額・利用先がもう1行ある → 別々の買い物として両方選択したまま注意を出す
+  function applyImportDuplicateCheck(row, seen, claimed, fileLabel) {
+    var key = row.date + "|" + row.amount + "|" + normalizeMerchant(row.merchant_name);
+    var existing = findCsvExistingMatch(row, claimed);
+    if (existing) {
+      row.duplicate = true;
+      row.selected = false;
+      row.matchReason = existing.reason;
+      row.matchedTxs = existing.txs || [existing.tx];
+      claimed[existing.tx.id] = true;
+    } else if (seen[key]) {
+      row.sameFileRepeat = true;
+      row.matchReason = (row.matchReason ? row.matchReason + " " : "") + "この" + fileLabel + "内に同じ日・金額・利用先の明細がもう1件あります。別々の利用として両方登録します（同じものなら外してください）。";
+    }
+    seen[key] = true;
   }
 
   function csvMerchantRule(merchantName) {
@@ -1445,6 +1478,7 @@
     var result = [];
     var ignored = 0;
     var seen = {};
+    var claimed = {};
 
     function appendParsedPdfRow(parsed) {
       if (!parsed) return;
@@ -1468,31 +1502,13 @@
       };
 
       var rowMonth = monthKeyFromDate(row.date);
-      if (rowMonth < OPERATION_START_MONTH) {
-        row.selected = false;
-        row.disabled = false;
-        row.matchReason = monthLabel(OPERATION_START_MONTH) + "運用開始前の明細です。必要なら選択して過去明細として反映できます。";
-      } else if (paidSettlementRecord(rowMonth)) {
+      if (paidSettlementRecord(rowMonth)) {
         row.selected = false;
         row.disabled = true;
         row.matchReason = "この月は精算済みです。追加する場合は先に支払済み記録を取り消してください。";
       }
 
-      var key = row.date + "|" + row.amount + "|" + normalizeMerchant(row.merchant_name);
-      var existing = findCsvExistingMatch(row);
-
-      if (seen[key]) {
-        row.duplicate = true;
-        row.selected = false;
-        row.matchReason = "このPDF内に同じ日・金額・利用先の明細があります";
-      } else if (existing) {
-        row.duplicate = true;
-        row.selected = false;
-        row.matchReason = existing.reason;
-        row.matchedTxs = existing.txs || [existing.tx];
-      }
-
-      seen[key] = true;
+      applyImportDuplicateCheck(row, seen, claimed, "PDF");
       result.push(row);
     }
 
@@ -1585,6 +1601,7 @@
     var result = [];
     var ignored = 0;
     var csvSeen = {};
+    var csvClaimed = {};
 
     parsed.slice(header.rowIndex + 1).forEach(function (values) {
       var date = parseCsvDate(values[header.dateIndex]);
@@ -1615,29 +1632,13 @@
       };
 
       var rowMonth = monthKeyFromDate(row.date);
-      if (rowMonth < OPERATION_START_MONTH) {
-        row.selected = false;
-        row.disabled = false;
-        row.matchReason = monthLabel(OPERATION_START_MONTH) + "運用開始前の明細です。必要なら選択して過去明細として反映できます。";
-      } else if (paidSettlementRecord(rowMonth)) {
+      if (paidSettlementRecord(rowMonth)) {
         row.selected = false;
         row.disabled = true;
         row.matchReason = "この月は精算済みです。追加する場合は先に支払済み記録を取り消してください。";
       }
 
-      var csvKey = date + "|" + amount + "|" + normalizeMerchant(merchant);
-      var existing = findCsvExistingMatch(row);
-      if (csvSeen[csvKey]) {
-        row.duplicate = true;
-        row.selected = false;
-        row.matchReason = "このCSV内に同じ日・金額・利用先の明細があります";
-      } else if (existing) {
-        row.duplicate = true;
-        row.selected = false;
-        row.matchReason = existing.reason;
-        row.matchedTxs = existing.txs || [existing.tx];
-      }
-      csvSeen[csvKey] = true;
+      applyImportDuplicateCheck(row, csvSeen, csvClaimed, "CSV");
       result.push(row);
     });
 
@@ -1824,8 +1825,6 @@
     var card = cardForId(tx.card_id);
     if (card) return cardDisplay(card);
     if (tx.card_label) return tx.card_label;
-    if (tx.source === "rakuten_email") return "楽天カード";
-    if (tx.source === "epos_email") return "エポスカード";
     if (tx.source === "pdf") return "PDF取込";
     if (tx.source === "csv") return "CSV取込";
     return "取込";
@@ -2444,7 +2443,47 @@
   }
 
   function directionText(amount) {
-    return amount >= 0 ? "うー → にゃちへ支払い" : "にゃち → うーへ支払い";
+    return amount >= 0
+      ? memberName("partner") + " → " + memberName("me") + "へ支払い"
+      : memberName("me") + " → " + memberName("partner") + "へ支払い";
+  }
+
+  var CARD_PROVIDER_LABELS = { rakuten:"楽天カード", epos:"エポスカード" };
+
+  // 毎月明細を取り込むべきカード。登録済みカードがなければ、取込できるカード会社を並べる。
+  function expectedImportCards() {
+    var cards = (state.data && state.data.cards || []).slice().sort(function (a, b) {
+      return Number(a.id) - Number(b.id);
+    });
+    if (cards.length) return cards;
+    return Object.keys(CARD_PROVIDER_LABELS).map(function (provider) {
+      return { id:null, provider:provider, name:CARD_PROVIDER_LABELS[provider], owner:null, last4:null };
+    });
+  }
+
+  // 指定月分として取込履歴があるかをカードごとに返す。
+  function cardImportStatus(monthKey) {
+    var batches = state.data && state.data.import_batches || [];
+    return expectedImportCards().map(function (card) {
+      var monthBatches = batches.filter(function (batch) {
+        if (monthKeyFromDate(batch.target_month) !== monthKey) return false;
+        if (card.id) return Number(batch.card_id) === Number(card.id);
+        var batchCard = cardForId(batch.card_id);
+        return !!batchCard && batchCard.provider === card.provider;
+      });
+      return {
+        card:card,
+        imported:monthBatches.length > 0,
+        count:monthBatches.reduce(function (sum, batch) {
+          return sum + Number(batch.imported_count || 0);
+        }, 0)
+      };
+    });
+  }
+
+  function importCardLabel(card) {
+    var owner = card.owner ? memberName(card.owner) + "の" : "";
+    return owner + cardDisplay(card, CARD_PROVIDER_LABELS[card.provider] || "カード");
   }
 
   // 精算するとその月の明細は追加・変更できなくなる。
@@ -2453,20 +2492,9 @@
     var monthTx = (state.data.transactions || []).filter(function (tx) {
       return monthKeyFromDate(tx.date) === monthKey;
     });
-    // 楽天はメール自動取込（rakuten_email）が主なので、CSV/PDFだけでなく全取込元を数える。
-    var cards = [
-      { provider:"epos", label:"エポス", emailSource:"epos_email" },
-      { provider:"rakuten", label:"楽天", emailSource:"rakuten_email" }
-    ];
-    var importedSources = ["csv", "pdf", "epos_email", "rakuten_email"];
-    var cardLines = cards.map(function (card) {
-      var count = monthTx.filter(function (tx) {
-        if (importedSources.indexOf(tx.source) === -1) return false;
-        if (tx.card_provider) return tx.card_provider === card.provider;
-        return tx.source === card.emailSource ||
-          (!!tx.card_label && tx.card_label.indexOf(card.label) !== -1);
-      }).length;
-      return card.label + "：" + (count ? count + "件取込済み" : "未取込");
+    var cardLines = cardImportStatus(monthKey).map(function (status) {
+      return importCardLabel(status.card) + "：" +
+        (status.imported ? status.count + "件取込済み" : "未取込");
     });
     var unclassified = monthTx.filter(function (tx) {
       return tx.status === "unclassified";
@@ -2476,6 +2504,48 @@
       "\nカード明細 " + cardLines.join(" / ") +
       (unclassified ? "\n未分類 " + unclassified + "件（精算額に入っていません）" : "") +
       "\n精算後はこの月の明細を追加・変更できません。";
+  }
+
+  // ホームのリマインド：前月分のカード明細で、まだ取り込んでいないものを出す。
+  function importReminderMonth() {
+    var month = addMonths(actualMonthKey(), -1);
+    if (month < OPERATION_START_MONTH) return null;
+    if (paidSettlementRecord(month)) return null;
+    return month;
+  }
+
+  function renderImportReminder() {
+    var card = document.getElementById("importReminderCard");
+    if (!card) return;
+    var month = importReminderMonth();
+    var pending = month
+      ? cardImportStatus(month).filter(function (status) { return !status.imported; })
+      : [];
+    card.classList.toggle("hidden", pending.length === 0);
+    if (!pending.length) return;
+
+    document.getElementById("importReminderTitle").textContent =
+      monthLabel(month) + "分のカード明細を読み込みましょう";
+    document.getElementById("importReminderList").innerHTML = pending.map(function (status) {
+      return '<li>' + escapeHtml(importCardLabel(status.card)) + '</li>';
+    }).join("");
+    var button = document.getElementById("importReminderButton");
+    button.setAttribute("data-reminder-month", month);
+    button.setAttribute("data-reminder-card", pending.length === 1 && pending[0].card.id ? pending[0].card.id : "");
+  }
+
+  function openImportForReminder(month, cardId) {
+    resetCsvImport();
+    var card = cardId ? cardForId(cardId) : null;
+    if (card) {
+      var companyButton = document.querySelector('[data-card-company="' + card.provider + '"]');
+      if (companyButton) companyButton.click();
+      document.getElementById("csvCardName").value = card.name;
+      document.getElementById("csvCardLast4").value = card.last4 || "";
+      document.getElementById("csvPayer").value = card.owner === "partner" ? "partner" : "me";
+    }
+    document.getElementById("csvTargetMonth").value = month;
+    document.getElementById("csvImportDialog").showModal();
   }
 
   function paidSettlementRecord(monthKey) {
@@ -2565,6 +2635,7 @@
 
     var selectedMonthLabel = monthLabel(state.currentMonth);
     var settlementMonth = addMonths(state.currentMonth, 1);
+    renderImportReminder();
     renderPaymentDueCard();
     document.getElementById("settlementTitle").textContent = selectedMonthLabel + "分の精算見込み";
     document.getElementById("breakdownTitle").textContent = selectedMonthLabel + "分の精算内訳";
@@ -2679,12 +2750,12 @@
 
     document.getElementById("initialExpenseTotal").textContent = yen(initialTotal);
     document.getElementById("initialExpenseSplit").textContent =
-      "にゃち " + yen(initialMe) + " / うー " + yen(initialPartner);
+      memberName("me") + " " + yen(initialMe) + " / " + memberName("partner") + " " + yen(initialPartner);
 
     var initialDirection = "返済なし";
     if (Number(summary.plan.original_amount || 0) > 0) {
-      var lenderName = summary.plan.lender === "me" ? "にゃち" : "うー";
-      var borrowerName = summary.plan.borrower === "me" ? "にゃち" : "うー";
+      var lenderName = memberName(summary.plan.lender === "me" ? "me" : "partner");
+      var borrowerName = memberName(summary.plan.borrower === "me" ? "me" : "partner");
       initialDirection = "返済：" + borrowerName + " → " + lenderName;
     }
     document.getElementById("initialExpenseDirection").textContent = initialDirection;
@@ -2692,7 +2763,7 @@
     document.getElementById("initialExpensesList").innerHTML =
       initialExpenses.map(function (x) {
         var detail = shortDate(x.date) + " ・ " +
-          (x.payer === "me" ? "にゃちが支払い" : "うーが支払い");
+          (memberName(x.payer === "me" ? "me" : "partner") + "が支払い");
         return '<button type="button" class="transaction-row transaction-edit-row" data-edit-initial-expense="' + x.id + '">' +
           '<div class="tx-icon">↔</div>' +
           '<div class="tx-main"><strong>' + escapeHtml(x.item_name) + '</strong><small>' +
@@ -2723,6 +2794,8 @@
           '<button type="button" class="settings-mini-button danger" data-category-delete="' + category.id + '">削除</button>' +
           '</div>';
       }).join("");
+
+    renderCardSettings();
 
     var categoryOptions = state.data.categories.map(function (c) {
       return '<option value="' + escapeHtml(c.name) + '">' +
@@ -2878,6 +2951,35 @@
     document.getElementById("merchantRuleDialog").showModal();
   }
 
+  function cardBatchCount(cardId) {
+    return (state.data.import_batches || []).filter(function (batch) {
+      return Number(batch.card_id) === Number(cardId);
+    }).length;
+  }
+
+  function renderCardSettings() {
+    var list = document.getElementById("cardSettingsList");
+    if (!list) return;
+    var cards = (state.data.cards || []).slice().sort(function (a, b) {
+      return Number(a.id) - Number(b.id);
+    });
+    list.innerHTML = cards.length
+      ? cards.map(function (card) {
+          var batches = cardBatchCount(card.id);
+          return '<div class="settings-manage-row card-manage-row">' +
+            '<div class="card-manage-meta"><strong>' + escapeHtml(CARD_PROVIDER_LABELS[card.provider] || card.provider) + '</strong>' +
+            '<small>' + escapeHtml(memberName(card.owner)) + 'のカード ・ 取込 ' + batches + '回</small></div>' +
+            '<input type="text" maxlength="40" value="' + escapeHtml(card.name) + '" data-card-name="' + card.id + '" aria-label="カード名">' +
+            '<input type="text" inputmode="numeric" maxlength="4" placeholder="下4桁" value="' + escapeHtml(card.last4 || "") + '" data-card-last4="' + card.id + '" aria-label="カード番号下4桁">' +
+            '<button type="button" class="settings-mini-button" data-card-save="' + card.id + '">保存</button>' +
+            '<button type="button" class="settings-mini-button danger" data-card-delete="' + card.id + '"' +
+            (batches ? ' disabled title="取込履歴があるカードは削除できません"' : '') + '>削除</button>' +
+            '</div>';
+        }).join("") +
+        '<p class="settings-help">取込履歴があるカードは削除できません。名前を変えると、取込済みの明細の表示も変わります。</p>'
+      : '<p class="muted">カードはまだありません。カード明細を読み込むと登録されます。</p>';
+  }
+
   function bindDynamicButtons() {
     document.querySelectorAll("[data-classify]").forEach(function (button) {
       button.onclick = function () {
@@ -2908,6 +3010,56 @@
     document.querySelectorAll("[data-edit-merchant-rule]").forEach(function (button) {
       button.onclick = function () {
         openMerchantRuleEditor(Number(button.getAttribute("data-edit-merchant-rule")));
+      };
+    });
+
+    document.querySelectorAll("[data-card-save]").forEach(function (button) {
+      button.onclick = async function () {
+        var id = Number(button.getAttribute("data-card-save"));
+        var name = document.querySelector('[data-card-name="' + id + '"]').value.trim();
+        var last4 = document.querySelector('[data-card-last4="' + id + '"]').value.trim();
+        if (!name) {
+          alert("カード名を入力してください。");
+          return;
+        }
+        if (last4 && !/^\d{4}$/.test(last4)) {
+          alert("カード番号下4桁は4桁の数字で入力してください。");
+          return;
+        }
+        button.disabled = true;
+        try {
+          await window.kakeiboDb.updateCard(id, { name:name, last4:last4 });
+          state.data = await window.kakeiboDb.getInitialData();
+          render();
+        } catch (error) {
+          console.error(error);
+          alert(error && error.code === "23505"
+            ? "同じ持ち主・カード会社・名前・下4桁のカードがすでにあります。"
+            : "カードを変更できませんでした。");
+        } finally {
+          button.disabled = false;
+        }
+      };
+    });
+
+    document.querySelectorAll("[data-card-delete]").forEach(function (button) {
+      button.onclick = async function () {
+        var id = Number(button.getAttribute("data-card-delete"));
+        var card = cardForId(id);
+        if (!card) return;
+        if (!window.confirm(cardDisplay(card) + " を削除しますか？")) return;
+        button.disabled = true;
+        try {
+          await window.kakeiboDb.deleteCard(id);
+          state.data = await window.kakeiboDb.getInitialData();
+          render();
+        } catch (error) {
+          console.error(error);
+          button.disabled = false;
+          alert(error && error.code === "23503"
+            ? "取込履歴があるカードは削除できません。"
+            : "カードを削除できませんでした。");
+        }
       };
     });
 
@@ -3088,7 +3240,6 @@
       if (dialog && dialog.id === "csvImportDialog") {
         var targetMonth = document.getElementById("csvTargetMonth");
         if (targetMonth && !targetMonth.value) targetMonth.value = state.currentMonth;
-        if (targetMonth) targetMonth.min = OPERATION_START_MONTH;
       }
       if (dialog) dialog.showModal();
     });
@@ -3117,6 +3268,9 @@
   });
 
   document.getElementById("shareSettingsButton").addEventListener("click", openShareSettings);
+  document.getElementById("cardSettingsButton").addEventListener("click", function () {
+    document.getElementById("cardSettingsDialog").showModal();
+  });
   document.getElementById("categorySettingsButton").addEventListener("click", function () {
     document.getElementById("categorySettingsDialog").showModal();
   });
@@ -3266,6 +3420,13 @@
     }
   });
 
+  document.getElementById("importReminderButton").addEventListener("click", function () {
+    openImportForReminder(
+      this.getAttribute("data-reminder-month") || state.currentMonth,
+      this.getAttribute("data-reminder-card")
+    );
+  });
+
   document.querySelectorAll("[data-card-company]").forEach(function (button) {
     button.addEventListener("click", function () {
       var company = document.getElementById("csvCardCompany");
@@ -3399,10 +3560,6 @@
     var targetMonth = document.getElementById("csvTargetMonth").value;
     if (!provider || !cardName || !targetMonth) {
       alert("カード会社・カード名・何月分かを確認してください。");
-      return;
-    }
-    if (targetMonth < OPERATION_START_MONTH) {
-      alert(fullMonthLabel(OPERATION_START_MONTH) + "より前の明細は取込対象外です。");
       return;
     }
     if (cardLast4 && !/^\d{4}$/.test(cardLast4)) {
@@ -3570,7 +3727,18 @@
       console.error(e);
       button.disabled = false;
       button.textContent = "払ったよー";
-      alert("支払い済みにできませんでした。");
+      var payMessage = String((e && (e.message || e.details)) || "");
+      if (payMessage.indexOf("SETTLEMENT_AMOUNT_MISMATCH") !== -1) {
+        alert("画面の精算額が最新ではありません。相手が明細を変更した可能性があります。画面を更新してから、もう一度お試しください。");
+        try {
+          state.data = await window.kakeiboDb.getInitialData();
+          render();
+        } catch (reloadError) {
+          console.error(reloadError);
+        }
+      } else {
+        alert("支払い済みにできませんでした。");
+      }
     }
   });
 

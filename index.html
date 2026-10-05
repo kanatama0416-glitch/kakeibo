@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=20260927-1508">
   <link rel="icon" type="image/png" href="./apple-touch-icon.png?v=20260927-1508">
   <link rel="manifest" href="./manifest.webmanifest?v=20260927-1508">
-  <link rel="stylesheet" href="./styles.css?v=20261005-LEDGERCTA1">
+  <link rel="stylesheet" href="./styles.css?v=20261006-REVIEWFIX1">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -76,6 +76,14 @@
 
     <main>
       <section class="screen active" data-screen="home">
+        <article id="importReminderCard" class="import-reminder-card hidden" aria-live="polite">
+          <div class="import-reminder-text">
+            <strong id="importReminderTitle">カード明細を読み込みましょう</strong>
+            <small>まだ取り込んでいないカード</small>
+            <ul id="importReminderList"></ul>
+          </div>
+          <button id="importReminderButton" type="button">読み込む</button>
+        </article>
         <article id="paymentDueCard" class="payment-due-card">
           <div class="payment-due-head">
             <div>
@@ -315,6 +323,7 @@
         </div>
         <div class="settings-card">
           <button id="shareSettingsButton" type="button"><span><strong>共同費の基本負担</strong></span><b>›</b></button>
+          <button id="cardSettingsButton" type="button"><span><strong>カード</strong></span><b>›</b></button>
           <button id="categorySettingsButton" type="button"><span><strong>費目</strong></span><b>›</b></button>
           <button id="merchantSettingsButton" type="button"><span><strong>店舗ルール</strong></span><b>›</b></button>
           <button id="auditHistoryButton" type="button"><span><strong>変更履歴</strong></span><b>›</b></button>
@@ -354,6 +363,14 @@
       </div>
       <button class="primary-button" type="submit">保存する</button>
     </form>
+  </dialog>
+
+  <dialog id="cardSettingsDialog">
+    <div class="dialog-card settings-dialog-scroll">
+      <div class="dialog-head"><h3>カード</h3><button type="button" data-close-dialog>×</button></div>
+      <p class="settings-help">カード名と番号下4桁を直せます。</p>
+      <div id="cardSettingsList" class="settings-manage-list"></div>
+    </div>
   </dialog>
 
   <dialog id="categorySettingsDialog">
@@ -589,8 +606,8 @@
   <script src="./config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="./supabase-client.js?v=20261003-CATEGORYEMOJI1"></script>
-  <script src="./app.js?v=20261005-CARDCHOICE1"></script>
+  <script src="./supabase-client.js?v=20261006-REVIEWFIX1"></script>
+  <script src="./app.js?v=20261006-REVIEWFIX1"></script>
   <script src="./auth.js?v=20260927-INTEGRITY1"></script>
 </body>
 </html>
