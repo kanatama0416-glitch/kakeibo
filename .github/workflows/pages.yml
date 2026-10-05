@@ -29,15 +29,11 @@ jobs:
         with:
           enablement: true
 
-      # 本番アプリに加え、ダミーデータだけを使う画面確認用 test/ も配信する。
-      # test/index.html は index.html から生成する（手作業の同期漏れを防ぐ）。
-      - name: Build test page from index.html
-        run: node scripts/build-test-html.js
-
+      # 本番アプリに加え、ダミーデータだけを使う画面確認用 test/（?mode=test へ転送）も配信する。
       - name: Collect site files
         run: |
           mkdir -p _site/assets _site/test
-          cp index.html config.js supabase-client.js app.js auth.js styles.css \
+          cp index.html boot.js config.js supabase-client.js app.js auth.js styles.css \
              manifest.webmanifest apple-touch-icon.png _site/
           cp assets/*.webp _site/assets/
           cp test/index.html test/test-db.js _site/test/

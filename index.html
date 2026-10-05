@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=20260927-1508">
   <link rel="icon" type="image/png" href="./apple-touch-icon.png?v=20260927-1508">
   <link rel="manifest" href="./manifest.webmanifest?v=20260927-1508">
-  <link rel="stylesheet" href="./styles.css?v=20261006-REVIEWFIX1">
+  <link rel="stylesheet" href="./styles.css?v=20261006-REVIEWFIX2">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -66,7 +66,7 @@
     <header class="topbar">
       <div class="topbar-brand">
         <p class="eyebrow">Kakeibo</p>
-        <h1>うーにゃち家計</h1>
+        <h1>うーにゃち家計 <small id="testModeBadge" class="test-mode-badge hidden">TEST</small></h1>
       </div>
       <div id="topbarScreenTitle" class="topbar-screen-title hidden">明細</div>
       <div class="header-actions">
@@ -74,6 +74,7 @@
       </div>
     </header>
 
+    <div id="testModeBanner" class="test-mode-banner hidden">テスト環境｜10月・11月・12月のダミーデータです。本番DBには保存されません。</div>
     <main>
       <section class="screen active" data-screen="home">
         <article id="importReminderCard" class="import-reminder-card hidden" aria-live="polite">
@@ -327,7 +328,7 @@
           <button id="categorySettingsButton" type="button"><span><strong>費目</strong></span><b>›</b></button>
           <button id="merchantSettingsButton" type="button"><span><strong>店舗ルール</strong></span><b>›</b></button>
           <button id="auditHistoryButton" type="button"><span><strong>変更履歴</strong></span><b>›</b></button>
-          <a class="settings-link-row" href="./test/"><span><strong>テスト環境</strong></span><b>›</b></a>
+          <a id="environmentLink" class="settings-link-row" href="./test/"><span><strong>テスト環境</strong></span><b>›</b></a>
           <button id="logoutButton" type="button"><span><strong>ログアウト</strong></span><b>›</b></button>
         </div>
 
@@ -606,8 +607,6 @@
   <script src="./config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="./supabase-client.js?v=20261006-REVIEWFIX1"></script>
-  <script src="./app.js?v=20261006-REVIEWFIX1"></script>
-  <script src="./auth.js?v=20260927-INTEGRITY1"></script>
+  <script src="./boot.js?v=20261006-REVIEWFIX2"></script>
 </body>
 </html>

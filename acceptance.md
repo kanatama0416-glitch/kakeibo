@@ -130,7 +130,7 @@
 - 精算額が画面とDBの再計算で食い違うと、精算済みにならず「画面の精算額が最新ではありません」と出る。
 - コードと公開リポジトリに実在のメールアドレスが含まれない。取込者・変更履歴の名前はDBのメンバー表から表示する。
 - anon は家計テーブルに一切の権限を持たない。authenticated は TRUNCATE / REFERENCES / TRIGGER を持たない。
-- test/index.html は scripts/build-test-html.js で index.html から生成され、公開時にも自動生成される。
+- 本番とテスト環境は同じ index.html を使う。/test/ は ?mode=test へ転送され、ダミーデータで動く（本番DBに触れない）。
 - 本番DBの現行スキーマが supabase/schema.sql として書き出されている。
 - iPhone幅（390px）で横スクロールが出ない。
 - 公開GitHub Pagesに今回のバージョン（REVIEWFIX1）が配信されている。
@@ -143,4 +143,8 @@
   - 設定 > カード：名前変更が取込済み明細の card_label に反映。取込履歴ありのカードは削除ボタンが無効。下4桁「12a」はエラーで止まる。
   - 精算：確認ダイアログにカード別の取込状況が出て、精算済みにするとリマインドが消える。取込履歴の取込者名がメンバー表から表示される。
 - 本番DB（ロールバック試験）：authenticated ロール・許可ユーザーとして cards / import_batches / transactions への取込を実行し、RLSを通って保存・監査ログ2件・取込者メール自動設定を確認。例外で全体をロールバックし、件数が0のままであることを確認。
-- 未完了：本番DBへの migration（20261005160000）適用。適用操作が3回キャンセルされたため、DB側の基準（カード編集の権限・精算額の再計算・メンバー表・権限整理・スキーマ書き出し）と公開版への反映は未確認。
+- 本番DB：migration 20261005160000 を適用（apply_migration が承認画面に届かず取り消されたため、同じ内容を execute_sql で分割適用し、schema_migrations に記録）。
+  - 権限：anon の家計テーブル権限0件、authenticated の TRUNCATE/REFERENCES/TRIGGER 0件。anon は kakeibo_members / 精算RPC を実行不可、keepalive は実行可。
+  - ロールバック試験（authenticated・許可ユーザー）：メンバー2件取得、カード名変更が明細の card_label に反映、cards の監査ログ記録、2026-09 精算は OPERATION_NOT_STARTED、2026-10 精算は FUTURE_SETTLEMENT_NOT_ALLOWED、内部計算関数の直接実行は拒否。試験後の件数は0のまま。
+  - 精算額：同じ明細・繰越・返済設定で、DB（kakeibo_settlement_breakdown）と画面（app.js）の結果が 10月 6,584円 / 11月 679円 / 12月 4,722円 で一致。
+- スキーマ：本番カタログから supabase/schema.sql を書き出し、空のPostgreSQL 16（auth 等を最小限に模擬）に適用して成功。テーブル15・関数18・ポリシー19・トリガー19・インデックス35 が本番と一致。同DBで精算の記録（不一致は SETTLEMENT_AMOUNT_MISMATCH、一致時は精算と返済を記録し残額が減る）を確認。

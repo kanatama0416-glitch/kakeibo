@@ -58,7 +58,7 @@ supabase db dump --schema public,private -f supabase/schema.sql
 
 ## テスト画面
 
-`test/index.html` は `node scripts/build-test-html.js` で `index.html` から生成する（GitHub Pages の公開時にも自動生成）。手で編集しない。
+テスト環境は `index.html?mode=test`（`/test/` からも転送）。本番と同じ `index.html` を使い、`boot.js` が Supabase の代わりに `test/test-db.js` のダミーデータを読み込む。
 
 ## セキュリティ
 

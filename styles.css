@@ -629,7 +629,6 @@ html,body,.app-shell{max-width:100%;overflow-x:hidden}
 
 /* Card statement reminder (home) */
 .import-reminder-card{display:flex;align-items:center;gap:12px;margin:0 0 14px;padding:14px 16px;border-radius:22px;background:#fff4e3;border:1px solid #efdbb8;color:#5c3d0e}
-.import-reminder-card.hidden{display:none}
 .import-reminder-text{flex:1;min-width:0}
 .import-reminder-text strong{display:block;font-size:14px;line-height:1.35}
 .import-reminder-text small{display:block;margin-top:4px;font-size:11px;font-weight:800;color:#8a5b16}
@@ -643,3 +642,7 @@ html,body,.app-shell{max-width:100%;overflow-x:hidden}
 .card-manage-meta strong{font-size:13px}
 .card-manage-meta small{font-size:11px;color:var(--muted,#6b7280);white-space:nowrap}
 .settings-mini-button:disabled{opacity:.45}
+
+/* Test environment (?mode=test) */
+.test-mode-badge{font-size:10px;color:#1f7a5a}
+.test-mode-banner{margin:0 16px 8px;padding:9px 12px;border-radius:14px;background:#fff4e3;color:#8a5b16;font-size:11px;font-weight:900;border:1px solid #efdbb8}
