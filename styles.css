@@ -618,3 +618,9 @@ html,body,.app-shell{max-width:100%;overflow-x:hidden}
 .category-emoji-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
 .category-emoji-actions .soft-button,.category-emoji-actions .primary-button{margin:0}
 @media(max-width:380px){.category-emoji-grid{grid-template-columns:repeat(6,1fr)}}
+.card-company-field{margin-top:14px}
+.card-company-title{display:block;color:var(--muted);font-size:12px;font-weight:900}
+.card-company-choice{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}
+.card-company-option{min-height:48px;border:1.5px solid var(--line);border-radius:14px;background:#fff;color:var(--text);font-size:15px;font-weight:900;cursor:pointer;appearance:none;-webkit-tap-highlight-color:transparent}
+.card-company-option.active{background:var(--text);border-color:var(--text);color:#fff}
+.dialog-card input[type=file]:disabled{opacity:.45}

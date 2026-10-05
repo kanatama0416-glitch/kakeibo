@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="../apple-touch-icon.png?v=20260927-1508">
   <link rel="icon" type="image/png" href="../apple-touch-icon.png?v=20260927-1508">
   <link rel="manifest" href="../manifest.webmanifest?v=20260927-1508">
-  <link rel="stylesheet" href="../styles.css?v=20261003-EMOJIPICKER1">
+  <link rel="stylesheet" href="../styles.css?v=20261005-CARDCHOICE1">
 </head>
 <body>
   <section id="authGate" class="auth-gate hidden">
@@ -507,13 +507,14 @@
         </select>
       </label>
 
-      <label>カード会社
-        <select id="csvCardCompany">
-          <option value="">選択してください</option>
-          <option value="rakuten">楽天カード</option>
-          <option value="epos">エポスカード</option>
-        </select>
-      </label>
+      <div class="card-company-field">
+        <span class="card-company-title">カード会社</span>
+        <div class="card-company-choice" role="radiogroup" aria-label="カード会社">
+          <button type="button" class="card-company-option" role="radio" aria-checked="false" data-card-company="rakuten">楽天カード</button>
+          <button type="button" class="card-company-option" role="radio" aria-checked="false" data-card-company="epos">エポスカード</button>
+        </div>
+        <input id="csvCardCompany" type="hidden" value="">
+      </div>
 
       <label>カード名
         <input id="csvCardName" type="text" maxlength="60" placeholder="例：楽天カード">
@@ -528,9 +529,9 @@
       </label>
 
       <label class="csv-file-label">明細ファイル
-        <input id="csvFileInput" type="file" accept=".pdf,.csv,application/pdf,text/csv">
+        <input id="csvFileInput" type="file" accept=".pdf,.csv,application/pdf,text/csv" disabled>
       </label>
-      <p id="csvFileMessage" class="csv-file-message">先にカード会社を選んでください。</p>
+      <p id="csvFileMessage" class="csv-file-message">カード会社をタップすると、ファイルを選べるようになります。</p>
 
       <div id="csvReviewArea" class="hidden">
         <div class="csv-summary">
@@ -589,7 +590,7 @@
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
   <script>window.KAKEIBO_TEST_MODE = true;</script>
   <script src="./test-db.js?v=20261003-CATEGORYEMOJI1"></script>
-  <script src="../app.js?v=20261003-EMOJIPICKER1"></script>
+  <script src="../app.js?v=20261005-CARDCHOICE1"></script>
   <script>
     window.KakeiboApp.start().catch(function (error) {
       console.error(error);

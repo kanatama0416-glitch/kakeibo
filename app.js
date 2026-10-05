@@ -1762,6 +1762,7 @@
     state.importFileName = "";
     var company = document.getElementById("csvCardCompany");
     if (company) company.value = "";
+    syncCardCompanyChoice();
     var cardName = document.getElementById("csvCardName");
     if (cardName) cardName.value = "";
     var last4 = document.getElementById("csvCardLast4");
@@ -1775,8 +1776,20 @@
     var message = document.getElementById("csvFileMessage");
     if (message) {
       message.classList.remove("error");
-      message.textContent = "先にカード会社を選んでください。";
+      message.textContent = "カード会社をタップすると、ファイルを選べるようになります。";
     }
+  }
+
+  function syncCardCompanyChoice() {
+    var company = document.getElementById("csvCardCompany");
+    var value = company ? company.value : "";
+    document.querySelectorAll("[data-card-company]").forEach(function (button) {
+      var active = button.getAttribute("data-card-company") === value;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-checked", active ? "true" : "false");
+    });
+    var input = document.getElementById("csvFileInput");
+    if (input) input.disabled = !value;
   }
 
   function txRow(tx) {
@@ -3253,7 +3266,19 @@
     }
   });
 
+  document.querySelectorAll("[data-card-company]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var company = document.getElementById("csvCardCompany");
+      var value = button.getAttribute("data-card-company");
+      if (company.value === value) return;
+      company.value = value;
+      company.dispatchEvent(new Event("change"));
+    });
+  });
+  syncCardCompanyChoice();
+
   document.getElementById("csvCardCompany").addEventListener("change", function () {
+    syncCardCompanyChoice();
     state.csvRows = [];
     state.csvIgnoredCount = 0;
     state.importFileName = "";
@@ -3270,9 +3295,9 @@
       message.classList.remove("error");
       message.textContent = this.value
         ? (this.value === "rakuten"
-          ? "楽天カードの明細ファイルを選んでください。"
-          : "エポスカードの明細ファイルを選んでください。")
-        : "先にカード会社を選んでください。";
+          ? "楽天カードの明細ファイル（PDF・CSV）を選んでください。"
+          : "エポスカードの明細ファイル（PDF・CSV）を選んでください。")
+        : "カード会社をタップすると、ファイルを選べるようになります。";
     }
   });
 
