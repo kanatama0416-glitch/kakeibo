@@ -52,6 +52,14 @@ supabase db dump --schema public,private -f supabase/schema.sql
 
 書き出した後に `private.allowed_users` の実メールが含まれていないか確認してからコミットすること。
 
+## コード構成
+
+- `boot.js`：本番 / テスト環境の読み込みを切り替える
+- `lib/core.js`・`lib/settlement.js`・`lib/card-import.js`：画面に依存しない計算と判定（精算額、繰越、返済、取込の重複判定、取込状況）
+- `app.js`：画面の表示と操作
+- `supabase-client.js`：DBへのアクセス（テスト環境では `test/test-db.js` が同じ関数を持つ）
+- `test/unit/`：`lib/` の単体テスト（`node --test test/unit/*.test.js`）。GitHub Pages への公開前にも実行される
+
 ## メンバー（表示名）
 
 「にゃち / うー」とメールアドレスの対応は `private.allowed_users` の `member_key`（me / partner）と `display_name` に持たせ、`public.kakeibo_members()` で読む。コードにメールアドレスを書かない。

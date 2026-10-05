@@ -3,22 +3,29 @@
 (function () {
   "use strict";
 
-  var VERSION = "20261006-REVIEWFIX2";
+  var VERSION = "20261006-LOGICSPLIT1";
+
+  // 画面に依存しない計算・判定（単体テストあり）。app.js より先に読み込む。
+  var LOGIC_SCRIPTS = ["./lib/core.js", "./lib/settlement.js", "./lib/card-import.js"].map(function (src) {
+    return src + "?v=" + VERSION;
+  });
 
   var ENVIRONMENTS = {
     production: {
       scripts: [
-        "./supabase-client.js?v=" + VERSION,
+        "./supabase-client.js?v=" + VERSION
+      ].concat(LOGIC_SCRIPTS, [
         "./app.js?v=" + VERSION,
         "./auth.js?v=20260927-INTEGRITY1"
-      ],
+      ]),
       startApp: false
     },
     test: {
       scripts: [
-        "./test/test-db.js?v=" + VERSION,
+        "./test/test-db.js?v=" + VERSION
+      ].concat(LOGIC_SCRIPTS, [
         "./app.js?v=" + VERSION
-      ],
+      ]),
       startApp: true,
       title: "うーにゃち家計｜テスト環境",
       environmentLink: { href: "./", label: "本番へ戻る" }

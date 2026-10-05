@@ -7,3 +7,4 @@
 - 画面の確認はテスト環境（`index.html?mode=test`、`/test/` からも転送）を使う。本番とテストは同じ `index.html` を使い、環境ごとの違い（読み込むスクリプト、テスト用の表示）は `boot.js` で切り替える。
 - `app.js` / `supabase-client.js` / `test/test-db.js` を変更したら `boot.js` の `VERSION` と `index.html` の `boot.js?v=` を、`styles.css` を変更したら `index.html` の `styles.css?v=` を更新してキャッシュを切り替える。
 - 運用ルールとDBの扱いは `README.md` を正とする。
+- 精算の計算・取込の判定など画面に依存しない処理は `lib/` に置き、`test/unit/` に単体テストを書く（`node --test test/unit/*.test.js`、公開時にも実行）。精算の計算を変えるときは DB の `private.kakeibo_settlement_breakdown()` も同じ計算に直す。

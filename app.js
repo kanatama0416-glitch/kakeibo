@@ -1,16 +1,9 @@
 (function () {
-  var OPERATION_START_MONTH = "2026-10";
-  var REPAYMENT_START_MONTH = "2026-10";
-
-  function monthKeyFromDate(value) {
-    return value ? String(value).slice(0, 7) : "";
-  }
-
-  function addMonths(monthKey, offset) {
-    var parts = monthKey.split("-");
-    var date = new Date(Date.UTC(Number(parts[0]), Number(parts[1]) - 1 + offset, 1));
-    return date.getUTCFullYear() + "-" + String(date.getUTCMonth() + 1).padStart(2, "0");
-  }
+  var core = window.KakeiboCore;
+  var OPERATION_START_MONTH = core.OPERATION_START_MONTH;
+  var REPAYMENT_START_MONTH = core.REPAYMENT_START_MONTH;
+  var monthKeyFromDate = core.monthKeyFromDate;
+  var addMonths = core.addMonths;
 
   function monthLabel(monthKey) {
     var parts = monthKey.split("-");
@@ -132,10 +125,7 @@
   }
 
   function currentMeSharePercent() {
-    var settings = state.data && state.data.settings ? state.data.settings : null;
-    var value = settings ? Number(settings.me_share_percent) : 50;
-    if (!Number.isFinite(value) || value < 0 || value > 100) return 50;
-    return Math.round(value);
+    return window.KakeiboCore.sharePercent(state.data && state.data.settings);
   }
 
   function categoryIcon(categoryName) {
@@ -444,18 +434,8 @@
     }
   }
 
-  function normalizeText(value) {
-    var text = String(value == null ? "" : value);
-    try { text = text.normalize("NFKC"); } catch (e) {}
-    return text.trim();
-  }
-
-  function normalizeMerchant(value) {
-    return normalizeText(value)
-      .toLowerCase()
-      .replace(/[\s　]/g, "")
-      .replace(/[・･._\-—–ー\/\\（）()［\]\[\]「」『』]/g, "");
-  }
+  var normalizeText = window.KakeiboCore.normalizeText;
+  var normalizeMerchant = window.KakeiboCore.normalizeMerchant;
 
   function normalizeCsvHeader(value) {
     return normalizeText(value)
@@ -629,81 +609,6 @@
     var amount = Number(digits);
     if (!Number.isFinite(amount) || amount === 0) return null;
     return negative ? -amount : amount;
-  }
-
-  function dateDistanceInDays(a, b) {
-    var aTime = Date.parse(a + "T00:00:00Z");
-    var bTime = Date.parse(b + "T00:00:00Z");
-    if (!Number.isFinite(aTime) || !Number.isFinite(bTime)) return 999;
-    return Math.abs(aTime - bTime) / 86400000;
-  }
-
-  // claimed：同じファイル内の別の行がすでに「登録済み」と対応づけた明細ID。
-  // 1件の登録済み明細に、ファイル内の複数行が重複扱いでぶら下がらないようにする。
-  function findCsvExistingMatch(row, claimed) {
-    var merchantKey = normalizeMerchant(row.merchant_name);
-    var matchCandidates = state.data.transactions.filter(function (tx) {
-      if (claimed && claimed[tx.id]) return false;
-      return normalizeText(tx.memo).indexOf("現金") === -1;
-    });
-
-    var sameDateAmount = matchCandidates.filter(function (tx) {
-      return tx.date === row.date && Number(tx.amount) === Number(row.amount);
-    }).sort(function (a, b) {
-      var aExact = normalizeMerchant(a.merchant_name) === merchantKey ? 1 : 0;
-      var bExact = normalizeMerchant(b.merchant_name) === merchantKey ? 1 : 0;
-      return bExact - aExact;
-    });
-
-    if (sameDateAmount.length) {
-      var hasExactMerchant = sameDateAmount.some(function (tx) {
-        return normalizeMerchant(tx.merchant_name) === merchantKey;
-      });
-      return {
-        tx:sameDateAmount[0],
-        txs:sameDateAmount,
-        reason:hasExactMerchant
-          ? "同じ日・金額・利用先の明細があります"
-          : "同じ日・同じ金額の明細があります"
-      };
-    }
-
-    var nearbyMerchant = matchCandidates.filter(function (tx) {
-      return Number(tx.amount) === Number(row.amount) &&
-        normalizeMerchant(tx.merchant_name) === merchantKey &&
-        dateDistanceInDays(tx.date, row.date) <= 3;
-    }).sort(function (a, b) {
-      return dateDistanceInDays(a.date, row.date) - dateDistanceInDays(b.date, row.date);
-    });
-
-    if (nearbyMerchant.length) {
-      return {
-        tx:nearbyMerchant[0],
-        txs:nearbyMerchant,
-        reason:"同じ利用先・金額の明細が前後3日以内にあります"
-      };
-    }
-
-    return null;
-  }
-
-  // 取込行の重複判定。
-  // ・登録済みの明細と一致 → 重複として外す（1件の登録済み明細に対応づけるのは1行だけ）
-  // ・同じファイル内に同じ日・金額・利用先がもう1行ある → 別々の買い物として両方選択したまま注意を出す
-  function applyImportDuplicateCheck(row, seen, claimed, fileLabel) {
-    var key = row.date + "|" + row.amount + "|" + normalizeMerchant(row.merchant_name);
-    var existing = findCsvExistingMatch(row, claimed);
-    if (existing) {
-      row.duplicate = true;
-      row.selected = false;
-      row.matchReason = existing.reason;
-      row.matchedTxs = existing.txs || [existing.tx];
-      claimed[existing.tx.id] = true;
-    } else if (seen[key]) {
-      row.sameFileRepeat = true;
-      row.matchReason = (row.matchReason ? row.matchReason + " " : "") + "この" + fileLabel + "内に同じ日・金額・利用先の明細がもう1件あります。別々の利用として両方登録します（同じものなら外してください）。";
-    }
-    seen[key] = true;
   }
 
   function csvMerchantRule(merchantName) {
@@ -1477,8 +1382,7 @@
 
     var result = [];
     var ignored = 0;
-    var seen = {};
-    var claimed = {};
+    var duplicateContext = window.KakeiboCardImport.newDuplicateContext();
 
     function appendParsedPdfRow(parsed) {
       if (!parsed) return;
@@ -1508,7 +1412,7 @@
         row.matchReason = "この月は精算済みです。追加する場合は先に支払済み記録を取り消してください。";
       }
 
-      applyImportDuplicateCheck(row, seen, claimed, "PDF");
+      window.KakeiboCardImport.applyDuplicateCheck(state.data.transactions, row, duplicateContext, "PDF");
       result.push(row);
     }
 
@@ -1600,8 +1504,7 @@
 
     var result = [];
     var ignored = 0;
-    var csvSeen = {};
-    var csvClaimed = {};
+    var duplicateContext = window.KakeiboCardImport.newDuplicateContext();
 
     parsed.slice(header.rowIndex + 1).forEach(function (values) {
       var date = parseCsvDate(values[header.dateIndex]);
@@ -1638,7 +1541,7 @@
         row.matchReason = "この月は精算済みです。追加する場合は先に支払済み記録を取り消してください。";
       }
 
-      applyImportDuplicateCheck(row, csvSeen, csvClaimed, "CSV");
+      window.KakeiboCardImport.applyDuplicateCheck(state.data.transactions, row, duplicateContext, "CSV");
       result.push(row);
     });
 
@@ -2304,142 +2207,13 @@
     }).join("");
   }
 
+  // 精算の計算は lib/settlement.js（画面に依存しない・単体テストあり）。
   function carryOutRecord(category, monthKey) {
-    var targetMonth = monthKey || state.currentMonth;
-    return (state.data.carryovers || []).find(function (x) {
-      return x.category === category && monthKeyFromDate(x.from_month) === targetMonth;
-    }) || null;
-  }
-
-  function baseLivingCurrent(monthKey) {
-    var monthTransactions = (state.data.transactions || []).filter(function (t) {
-      return monthKeyFromDate(t.date) === monthKey &&
-        t.scope === "shared" &&
-        (t.status === "confirmed" || t.status === "refunded");
-    });
-    var total = monthTransactions.reduce(function (sum, t) {
-      return sum + Number(t.amount || 0);
-    }, 0);
-    var myShare = Math.round(total * currentMeSharePercent() / 100);
-    var paidByMe = monthTransactions.filter(function (t) {
-      return t.payer === "me";
-    }).reduce(function (sum, t) {
-      return sum + Number(t.amount || 0);
-    }, 0);
-    return paidByMe - myShare;
-  }
-
-  function effectiveCarryOutAmount(monthKey, depth) {
-    if (!monthKey || monthKey < OPERATION_START_MONTH) return 0;
-    if ((depth || 0) > 120) return 0;
-
-    var carryIn = monthKey === OPERATION_START_MONTH
-      ? 0
-      : effectiveCarryOutAmount(addMonths(monthKey, -1), (depth || 0) + 1);
-    var settlement = baseLivingCurrent(monthKey) + carryIn;
-    var record = carryOutRecord("living", monthKey);
-    if (!record || settlement === 0) return 0;
-
-    var raw = Number(record.amount || 0);
-    if (!raw || Math.sign(raw) !== Math.sign(settlement)) return 0;
-    return Math.sign(settlement) * Math.min(Math.abs(raw), Math.abs(settlement));
-  }
-
-  function carryInAmount(category, monthKey) {
-    var targetMonth = monthKey || state.currentMonth;
-    if (category !== "living" || targetMonth <= OPERATION_START_MONTH) return 0;
-    return effectiveCarryOutAmount(addMonths(targetMonth, -1), 0);
-  }
-
-  function repaymentRecord(monthKey, plan) {
-    return (state.data.repayments || []).find(function (x) {
-      return Number(x.repayment_plan_id) === Number(plan && plan.id) &&
-        monthKeyFromDate(x.repayment_month) === monthKey;
-    }) || null;
-  }
-
-  function repaymentSetting(monthKey, plan) {
-    return (state.data.repayment_amounts || []).find(function (x) {
-      return Number(x.repayment_plan_id) === Number(plan && plan.id) &&
-        monthKeyFromDate(x.repayment_month) === monthKey;
-    }) || null;
-  }
-
-  function repaymentAmountForMonth(monthKey, plan) {
-    if (!plan || !plan.id || monthKey < REPAYMENT_START_MONTH) return 0;
-
-    var recorded = repaymentRecord(monthKey, plan);
-    if (recorded) return Number(recorded.amount || 0);
-
-    var setting = repaymentSetting(monthKey, plan);
-    var monthlyAmount = setting
-      ? Math.max(0, Number(setting.amount || 0))
-      : Math.max(0, Number(plan.monthly_amount || 0));
-    var originalAmount = Math.max(0, Number(plan.original_amount || 0));
-    if (!monthlyAmount || !originalAmount) return 0;
-
-    var repaidBefore = (state.data.repayments || []).filter(function (x) {
-      return Number(x.repayment_plan_id) === Number(plan.id) &&
-        monthKeyFromDate(x.repayment_month) < monthKey;
-    }).reduce(function (sum, x) {
-      return sum + Number(x.amount || 0);
-    }, 0);
-
-    var outstandingBeforeMonth = Math.max(0, originalAmount - repaidBefore);
-    return Math.min(monthlyAmount, outstandingBeforeMonth);
+    return window.KakeiboSettlement.carryOutRecord(state.data, category, monthKey || state.currentMonth);
   }
 
   function calculateSummary(monthKey) {
-    var targetMonth = monthKey || state.currentMonth;
-    var monthTransactions = state.data.transactions.filter(function (t) {
-      return monthKeyFromDate(t.date) === targetMonth;
-    });
-    var shared = monthTransactions.filter(function (t) {
-      return t.scope === "shared" && (t.status === "confirmed" || t.status === "refunded");
-    });
-    var total = shared.reduce(function (s,t) { return s + Number(t.amount); }, 0);
-    var meSharePercent = currentMeSharePercent();
-    var myShare = Math.round(total * meSharePercent / 100);
-    var partnerShare = total - myShare;
-
-    var paidByMe = shared.filter(function (t) { return t.payer === "me"; })
-      .reduce(function (s,t) { return s + Number(t.amount); }, 0);
-    var paidByPartner = shared.filter(function (t) { return t.payer === "partner"; })
-      .reduce(function (s,t) { return s + Number(t.amount); }, 0);
-
-    // Positive = うー owes にゃち. Negative = にゃち owes うー.
-    var livingCurrent = paidByMe - myShare;
-    var carryInLiving = carryInAmount("living", targetMonth);
-    var livingSettlement = livingCurrent + carryInLiving;
-    var livingCarryOutRecord = carryOutRecord("living", targetMonth);
-    var livingCarryOut = effectiveCarryOutAmount(targetMonth, 0);
-    var livingPayNow = livingSettlement - livingCarryOut;
-
-    var plan = state.data.repayment_plan || {
-      id:null, original_amount:0, remaining_amount:0, monthly_amount:0, lender:"me", borrower:"partner"
-    };
-    var monthlyRepayment = repaymentAmountForMonth(targetMonth, plan);
-    var repaymentNet = plan.lender === "me" ? monthlyRepayment : -monthlyRepayment;
-    var finalSettlement = livingPayNow + repaymentNet;
-
-    return {
-      month:targetMonth,
-      total:total,
-      myShare:myShare,
-      partnerShare:partnerShare,
-      paidByMe:paidByMe,
-      paidByPartner:paidByPartner,
-      livingCurrent:livingCurrent,
-      carryInLiving:carryInLiving,
-      livingSettlement:livingSettlement,
-      livingCarryOut:livingCarryOut,
-      livingPayNow:livingPayNow,
-      monthlyRepayment:monthlyRepayment,
-      repaymentNet:repaymentNet,
-      finalSettlement:finalSettlement,
-      plan:plan,
-      monthTransactions:monthTransactions
-    };
+    return window.KakeiboSettlement.calculateSummary(state.data, monthKey || state.currentMonth);
   }
 
   function directionText(amount) {
@@ -2448,37 +2222,10 @@
       : memberName("me") + " → " + memberName("partner") + "へ支払い";
   }
 
-  var CARD_PROVIDER_LABELS = { rakuten:"楽天カード", epos:"エポスカード" };
+  var CARD_PROVIDER_LABELS = window.KakeiboCardImport.CARD_PROVIDER_LABELS;
 
-  // 毎月明細を取り込むべきカード。登録済みカードがなければ、取込できるカード会社を並べる。
-  function expectedImportCards() {
-    var cards = (state.data && state.data.cards || []).slice().sort(function (a, b) {
-      return Number(a.id) - Number(b.id);
-    });
-    if (cards.length) return cards;
-    return Object.keys(CARD_PROVIDER_LABELS).map(function (provider) {
-      return { id:null, provider:provider, name:CARD_PROVIDER_LABELS[provider], owner:null, last4:null };
-    });
-  }
-
-  // 指定月分として取込履歴があるかをカードごとに返す。
   function cardImportStatus(monthKey) {
-    var batches = state.data && state.data.import_batches || [];
-    return expectedImportCards().map(function (card) {
-      var monthBatches = batches.filter(function (batch) {
-        if (monthKeyFromDate(batch.target_month) !== monthKey) return false;
-        if (card.id) return Number(batch.card_id) === Number(card.id);
-        var batchCard = cardForId(batch.card_id);
-        return !!batchCard && batchCard.provider === card.provider;
-      });
-      return {
-        card:card,
-        imported:monthBatches.length > 0,
-        count:monthBatches.reduce(function (sum, batch) {
-          return sum + Number(batch.imported_count || 0);
-        }, 0)
-      };
-    });
+    return window.KakeiboCardImport.cardImportStatus(state.data || {}, monthKey);
   }
 
   function importCardLabel(card) {

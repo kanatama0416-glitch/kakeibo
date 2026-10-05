@@ -24,6 +24,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # 精算・取込判定の単体テストが通らなければ公開しない。
+      - name: Run unit tests
+        run: node --test test/unit/*.test.js
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:
@@ -32,10 +36,11 @@ jobs:
       # 本番アプリに加え、ダミーデータだけを使う画面確認用 test/（?mode=test へ転送）も配信する。
       - name: Collect site files
         run: |
-          mkdir -p _site/assets _site/test
+          mkdir -p _site/assets _site/test _site/lib
           cp index.html boot.js config.js supabase-client.js app.js auth.js styles.css \
              manifest.webmanifest apple-touch-icon.png _site/
           cp assets/*.webp _site/assets/
+          cp lib/*.js _site/lib/
           cp test/index.html test/test-db.js _site/test/
 
       - name: Upload artifact
