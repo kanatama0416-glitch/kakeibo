@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="../apple-touch-icon.png?v=20260927-1508">
   <link rel="icon" type="image/png" href="../apple-touch-icon.png?v=20260927-1508">
   <link rel="manifest" href="../manifest.webmanifest?v=20260927-1508">
-  <link rel="stylesheet" href="../styles.css?v=20261005-CARDCHOICE1">
+  <link rel="stylesheet" href="../styles.css?v=20261005-LEDGERCTA1">
 </head>
 <body>
   <section id="authGate" class="auth-gate hidden">
@@ -149,10 +149,13 @@
         </div>
 
         <div id="ledgerListView">
-          <button id="latestImportSummary" type="button" class="latest-import-summary hidden"></button>
-          <div class="ledger-actions">
-            <button type="button" class="primary-button ledger-action-button" data-open="manualExpenseDialog">＋ 支出を追加</button>
-            <button type="button" class="soft-button ledger-action-button" data-open="csvImportDialog">カード明細を読み込む</button>
+          <div class="latest-import-card">
+            <button id="latestImportSummary" type="button" class="latest-import-summary hidden"></button>
+            <button type="button" class="latest-import-action" data-open="csvImportDialog">
+              <span class="latest-import-action-icon" aria-hidden="true">💳</span>
+              <span class="latest-import-action-copy">カード明細を読み込む</span>
+              <span class="latest-import-action-chevron" aria-hidden="true">›</span>
+            </button>
           </div>
           <div class="chips ledger-filters" aria-label="明細の絞り込み">
             <button class="chip active" data-filter="all">すべて</button>
@@ -163,10 +166,6 @@
           <div id="allTransactions" class="transaction-list"></div>
           <div id="ledgerEmpty" class="ledger-empty-state hidden">
             <p id="ledgerEmptyMessage"></p>
-            <div class="ledger-empty-actions">
-              <button type="button" class="primary-button ledger-action-button" data-open="manualExpenseDialog">＋ 支出を追加</button>
-              <button type="button" class="soft-button ledger-action-button" data-open="csvImportDialog">カード明細を読み込む</button>
-            </div>
           </div>
         </div>
 
@@ -331,7 +330,7 @@
       </section>
     </main>
 
-    <button class="fab" type="button" data-open="manualExpenseDialog" aria-label="支出を追加">＋</button>
+    <button class="ledger-add-fixed" type="button" data-open="manualExpenseDialog">＋ 支出を追加</button>
 
     <nav class="bottom-nav">
       <button class="nav-item active" data-go="home"><span class="mascot-icon mascot-home" aria-hidden="true"></span><small>ホーム</small></button>
