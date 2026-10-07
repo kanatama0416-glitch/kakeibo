@@ -3780,8 +3780,12 @@
     });
   }
 
+  // 保存中の二重送信（素早い2回タップ）で同じ支出が2件登録されるのを防ぐ。
+  var manualExpenseSaving = false;
+
   document.getElementById("manualExpenseForm").addEventListener("submit", async function (event) {
     event.preventDefault();
+    if (manualExpenseSaving) return;
 
     var tx = {
       date:document.getElementById("manualExpenseDate").value,
@@ -3804,6 +3808,9 @@
       return;
     }
 
+    var saveButton = event.submitter || this.querySelector('button[value="save"]');
+    manualExpenseSaving = true;
+    if (saveButton) saveButton.disabled = true;
     try {
       await window.kakeiboDb.addManualTransaction(tx, remember);
       state.data = await window.kakeiboDb.getInitialData();
@@ -3817,6 +3824,9 @@
     } catch (e) {
       console.error(e);
       alert("支出を保存できませんでした。");
+    } finally {
+      manualExpenseSaving = false;
+      if (saveButton) saveButton.disabled = false;
     }
   });
 
