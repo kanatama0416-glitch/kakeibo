@@ -139,3 +139,33 @@ test("金額で分けた共同支出は指定した負担額で精算し、生�
   assert.equal(dec.partnerShare, dec.total - dec.myShare);
   assert.equal(dec.livingCurrent, 5000 - (501 + 3000 - 400));
 });
+
+test("精算済みの月に後から入った明細は、精算月で集計し、利用月の一覧には残る", function () {
+  var data = baseData();
+  // 10月利用だが、10月精算後に取り込まれて11月の精算に入った明細
+  data.transactions.push(tx(9, "2026-10-30", 4000, "me", { settlement_month:"2026-11-01" }));
+  var october = settlement.calculateSummary(data, "2026-10");
+  var november = settlement.calculateSummary(data, "2026-11");
+
+  assert.equal(october.total, 10001 + 3333 - 500);
+  assert.ok(october.monthTransactions.some(function (t) { return t.id === 9; }));
+  assert.equal(november.total, 1234 + 9876 + 4000);
+  assert.equal(november.paidByMe, 1234 + 4000);
+  assert.ok(!november.monthTransactions.some(function (t) { return t.id === 9; }));
+  assert.deepEqual(november.lateTransactions.map(function (t) { return t.id; }), [9]);
+  assert.equal(november.lateTotal, 4000);
+  assert.equal(october.lateTransactions.length, 0);
+});
+
+test("精算月がない明細は利用日の月で精算する（従来どおり）", function () {
+  assert.equal(settlement.settlementMonthOf({ date:"2026-10-31" }), "2026-10");
+  assert.equal(settlement.settlementMonthOf({ date:"2026-10-31", settlement_month:"2026-11-01" }), "2026-11");
+});
+
+test("次の未精算月：精算済みの月を飛ばす", function () {
+  var settled = [{ settlement_month:"2026-10-01" }, { settlement_month:"2026-11-01" }];
+  assert.equal(settlement.openSettlementMonth("2026-09", settled), "2026-09");
+  assert.equal(settlement.openSettlementMonth("2026-10", settled), "2026-12");
+  assert.equal(settlement.openSettlementMonth("2026-11", settled), "2026-12");
+  assert.equal(settlement.openSettlementMonth("2026-10", []), "2026-10");
+});

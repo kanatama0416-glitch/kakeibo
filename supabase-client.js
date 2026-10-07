@@ -87,7 +87,7 @@
 
     while (true) {
       var result = await client.from("transactions")
-        .select("id,transaction_date,merchant_name,merchant_raw,amount,scope,payer,me_share_amount,status,source,memo,is_demo,card_provider,card_label,card_id,import_batch_id,created_at,categories(name)")
+        .select("id,transaction_date,settlement_month,merchant_name,merchant_raw,amount,scope,payer,me_share_amount,status,source,memo,is_demo,card_provider,card_label,card_id,import_batch_id,created_at,categories(name)")
         .eq("is_demo", false)
         .order("transaction_date", { ascending:false })
         .order("id", { ascending:false })
@@ -171,6 +171,8 @@
         return {
           id:t.id,
           date:t.transaction_date,
+          // 精算月（DB が決める）。利用日の月と違えば、精算済みの月に後から追加された明細。
+          settlement_month:t.settlement_month || null,
           merchant_name:t.merchant_name,
           merchant_raw:t.merchant_raw,
           amount:t.amount,

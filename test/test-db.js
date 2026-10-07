@@ -94,6 +94,18 @@
     });
   }
 
+  // 本番DBのトリガーと同じく、精算月は利用日の月から見て最初の未精算月にする。
+  function settlementMonthFor(date) {
+    return window.KakeiboSettlement.openSettlementMonth(String(date).slice(0,7), data.settlements) + "-01";
+  }
+  function settlementMonthOfRow(row) {
+    return String(row.settlement_month || row.date).slice(0,7);
+  }
+  function isSettled(month) {
+    return data.settlements.some(function(x){return String(x.settlement_month).slice(0,7)===month;});
+  }
+  function lockedError() { return new Error("SETTLED_MONTH_LOCKED"); }
+
   async function getInitialData() { return clone(data); }
   async function getAuditLogs() { return clone(auditLogs); }
 
@@ -101,15 +113,21 @@
     var row=data.transactions.find(function(x){return Number(x.id)===Number(id);});
     if(!row) return;
     var before=clone(row);
-    Object.assign(row,{date:tx.date,merchant_name:tx.merchant_name,amount:Number(tx.amount),category_name:tx.category_name,scope:tx.scope,payer:tx.payer,me_share_amount:tx.scope==="shared"&&tx.me_share_amount!=null?Number(tx.me_share_amount):null,memo:tx.memo,status:Number(tx.amount)<0?"refunded":"confirmed"});
+    var sensitive=row.date!==tx.date||Number(row.amount)!==Number(tx.amount)||row.scope!==tx.scope||row.payer!==tx.payer;
+    if(sensitive && isSettled(settlementMonthOfRow(row))) throw lockedError();
+    var nextSettlementMonth=String(row.date).slice(0,7)!==String(tx.date).slice(0,7)
+      ? settlementMonthFor(tx.date)
+      : (row.settlement_month || null);
+    Object.assign(row,{settlement_month:nextSettlementMonth,date:tx.date,merchant_name:tx.merchant_name,amount:Number(tx.amount),category_name:tx.category_name,scope:tx.scope,payer:tx.payer,me_share_amount:tx.scope==="shared"&&tx.me_share_amount!=null?Number(tx.me_share_amount):null,memo:tx.memo,status:Number(tx.amount)<0?"refunded":"confirmed"});
     log("UPDATE","transactions",id,before,clone(row));
   }
   async function deleteTransaction(id) {
     var i=data.transactions.findIndex(function(x){return Number(x.id)===Number(id);});
+    if(i>=0 && isSettled(settlementMonthOfRow(data.transactions[i]))) throw lockedError();
     if(i>=0){var before=data.transactions[i];data.transactions.splice(i,1);log("DELETE","transactions",id,clone(before),null);}
   }
   async function addManualTransaction(tx) {
-    var row={id:++ids.transaction,date:tx.date,merchant_name:tx.merchant_name,amount:Number(tx.amount),category_name:tx.category_name,scope:tx.scope,payer:tx.payer,me_share_amount:tx.scope==="shared"&&tx.me_share_amount!=null?Number(tx.me_share_amount):null,status:Number(tx.amount)<0?"refunded":"confirmed",source:"manual",memo:tx.memo||""};
+    var row={id:++ids.transaction,date:tx.date,settlement_month:settlementMonthFor(tx.date),merchant_name:tx.merchant_name,amount:Number(tx.amount),category_name:tx.category_name,scope:tx.scope,payer:tx.payer,me_share_amount:tx.scope==="shared"&&tx.me_share_amount!=null?Number(tx.me_share_amount):null,status:Number(tx.amount)<0?"refunded":"confirmed",source:"manual",memo:tx.memo||""};
     data.transactions.push(row); log("INSERT","transactions",row.id,null,clone(row)); return clone(row);
   }
   async function importCsvTransactions(rows, batchMeta) {
@@ -145,7 +163,7 @@
     var inserted=[];
     for (var i=0;i<rows.length;i++) {
       var r=rows[i];
-      var row={id:++ids.transaction,date:r.date,merchant_name:r.merchant_name,merchant_raw:r.merchant_raw||r.merchant_name,amount:Number(r.amount),category_name:r.category_name||null,scope:r.scope||"shared",payer:r.payer||"me",status:r.category_name?(Number(r.amount)<0?"refunded":"confirmed"):"unclassified",source:r.source||"csv",memo:r.memo||"",card_provider:card.provider,card_label:card.name,card_id:card.id,import_batch_id:batch.id,created_at:now()};
+      var row={id:++ids.transaction,date:r.date,settlement_month:settlementMonthFor(r.date),merchant_name:r.merchant_name,merchant_raw:r.merchant_raw||r.merchant_name,amount:Number(r.amount),category_name:r.category_name||null,scope:r.scope||"shared",payer:r.payer||"me",status:r.category_name?(Number(r.amount)<0?"refunded":"confirmed"):"unclassified",source:r.source||"csv",memo:r.memo||"",card_provider:card.provider,card_label:card.name,card_id:card.id,import_batch_id:batch.id,created_at:now()};
       data.transactions.push(row);
       inserted.push(row);
     }

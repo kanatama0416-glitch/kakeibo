@@ -1461,14 +1461,8 @@
           : ""
       };
 
-      var rowMonth = monthKeyFromDate(row.date);
-      if (paidSettlementRecord(rowMonth)) {
-        row.selected = false;
-        row.disabled = true;
-        row.matchReason = "この月は精算済みです。追加する場合は先に支払済み記録を取り消してください。";
-      }
-
       window.KakeiboCardImport.applyDuplicateCheck(state.data.transactions, row, duplicateContext, "PDF");
+      noteLateSettlement(row);
       result.push(row);
     }
 
@@ -1590,14 +1584,8 @@
           : ""
       };
 
-      var rowMonth = monthKeyFromDate(row.date);
-      if (paidSettlementRecord(rowMonth)) {
-        row.selected = false;
-        row.disabled = true;
-        row.matchReason = "この月は精算済みです。追加する場合は先に支払済み記録を取り消してください。";
-      }
-
       window.KakeiboCardImport.applyDuplicateCheck(state.data.transactions, row, duplicateContext, "CSV");
+      noteLateSettlement(row);
       result.push(row);
     });
 
@@ -1811,10 +1799,18 @@
     return /^\d{4}-\d{2}$/.test(key) ? fullMonthLabel(key) : "対象月不明";
   }
 
+  // 利用月と違う月の精算に入った明細の目印（例：「11月精算」）。
+  function lateSettlementLabel(tx) {
+    var month = txSettlementMonth(tx);
+    return month && month !== monthKeyFromDate(tx.date) ? monthLabel(month) + "精算" : "";
+  }
+
   function ledgerTxRow(tx) {
     var title = tx.merchant_name + "（" + (tx.category_name || "未設定") + "）　" + shortDate(tx.date);
     var splitLabel = splitMetaLabel(tx);
-    var meta = (splitLabel ? splitLabel + " ｜ " : "") + payerLabel(tx.payer) + " ｜ " + sourceDisplay(tx);
+    var lateLabel = lateSettlementLabel(tx);
+    var meta = (lateLabel ? lateLabel + " ｜ " : "") +
+      (splitLabel ? splitLabel + " ｜ " : "") + payerLabel(tx.payer) + " ｜ " + sourceDisplay(tx);
     return '<button type="button" class="transaction-row transaction-edit-row ledger-transaction-row" data-edit-tx="' + tx.id + '">' +
       '<div class="tx-icon">' + escapeHtml(iconFor(tx)) + '</div>' +
       '<div class="tx-main"><strong>' + escapeHtml(title) + '</strong><small>' +
@@ -2292,8 +2288,8 @@
     return owner + cardDisplay(card, CARD_PROVIDER_LABELS[card.provider] || "カード");
   }
 
-  // 精算するとその月の明細は追加・変更できなくなる。
-  // カード明細は翌月中旬に届くため、取込前に精算していないかを確認させる。
+  // 精算するとその月の精算に入った明細は変更できなくなる。
+  // カード明細は翌月中旬に届くため、精算後に取り込んだ分は翌月の精算に入ることを伝える。
   function settlementReadinessWarning(monthKey) {
     var monthTx = (state.data.transactions || []).filter(function (tx) {
       return monthKeyFromDate(tx.date) === monthKey;
@@ -2309,14 +2305,15 @@
     return "\n\n【精算前の確認】" +
       "\nカード明細 " + cardLines.join(" / ") +
       (unclassified ? "\n未分類 " + unclassified + "件（精算額に入っていません）" : "") +
-      "\n精算後はこの月の明細を追加・変更できません。";
+      "\n精算後に追加したこの月の明細は、翌月の精算に入ります。" +
+      "\nこの月の精算に入った明細の金額・日付などは変更できなくなります。";
   }
 
   // ホームのリマインド：前月分のカード明細で、まだ取り込んでいないものを出す。
   function importReminderMonth() {
     var month = addMonths(actualMonthKey(), -1);
+    // 前月を精算済みにした後も、明細を取り込むまでリマインドを出す（取り込んだ分は次の精算に入る）。
     if (month < OPERATION_START_MONTH) return null;
-    if (paidSettlementRecord(month)) return null;
     return month;
   }
 
@@ -2360,6 +2357,29 @@
     }) || null;
   }
 
+  // 明細が入る精算月（利用月とは別）。精算済みの月に後から入った明細は次の未精算月になる。
+  function txSettlementMonth(tx) {
+    return window.KakeiboSettlement.settlementMonthOf(tx);
+  }
+
+  // これから登録する明細がどの月の精算に入るか（DB の判定と同じ）。
+  function settlementMonthForNewDate(date) {
+    return window.KakeiboSettlement.openSettlementMonth(monthKeyFromDate(date), state.data.settlements);
+  }
+
+  // 精算済みの月の取込行に、どの月の精算に入るかを添える（運用開始前の月は対象外）。
+  function noteLateSettlement(row) {
+    if (row.duplicate) return row;
+    var usedMonth = monthKeyFromDate(row.date);
+    if (usedMonth < OPERATION_START_MONTH) return row;
+    var target = settlementMonthForNewDate(row.date);
+    if (target === usedMonth) return row;
+    row.matchReason = (row.matchReason ? row.matchReason + " " : "") +
+      monthLabel(usedMonth) + "分は精算済みのため、" + monthLabel(target) + "の精算に入ります（分析は" +
+      monthLabel(usedMonth) + "のまま）。";
+    return row;
+  }
+
   function paidDateLabel(value) {
     if (!value) return "支払い済み";
     var date = new Date(value);
@@ -2371,11 +2391,12 @@
     }) + "に支払い済み";
   }
 
+  // その月の分は、その月末に精算する（例：10月分を10月末に）。
   function renderPaymentDueCard() {
     var paymentMonth = state.currentMonth;
-    var sourceMonth = addMonths(paymentMonth, -1);
+    var sourceMonth = paymentMonth;
     var paidRecord = paidSettlementRecord(sourceMonth);
-    var hasSourceMonth = (sourceMonth >= OPERATION_START_MONTH && sourceMonth <= addMonths(actualMonthKey(), -1)) || !!paidRecord;
+    var hasSourceMonth = (sourceMonth >= OPERATION_START_MONTH && sourceMonth <= actualMonthKey()) || !!paidRecord;
     var sourceSummary = hasSourceMonth ? calculateSummary(sourceMonth) : null;
     var amount = paidRecord
       ? Number(paidRecord.amount || 0)
@@ -2387,7 +2408,7 @@
     var payButton = document.getElementById("payCurrentSettlementButton");
     var undoButton = document.getElementById("undoPaymentButton");
 
-    document.getElementById("paymentDueTitle").textContent = monthLabel(paymentMonth) + "に払う額";
+    document.getElementById("paymentDueTitle").textContent = monthLabel(paymentMonth) + "末に払う額";
     document.getElementById("paymentDueSource").textContent = monthLabel(sourceMonth) + "分の精算";
     document.getElementById("paymentDueAmount").textContent = yen(Math.abs(amount));
 
@@ -2402,7 +2423,7 @@
       document.getElementById("paymentDueDirection").textContent =
         hasSourceMonth ? "精算する差額はありません" : monthLabel(sourceMonth) + "分の精算はありません";
       document.getElementById("paymentDueMeta").textContent =
-        hasSourceMonth ? "この月に支払う精算額は0円です。" : "前月分の利用データはありません。";
+        hasSourceMonth ? "この月に支払う精算額は0円です。" : "この月の精算はまだできません。";
       payButton.classList.add("hidden");
       undoButton.classList.add("hidden");
       return;
@@ -2425,7 +2446,8 @@
       status.classList.add("unpaid");
       status.textContent = "未払い";
       document.getElementById("paymentDueMeta").textContent =
-        monthLabel(sourceMonth) + "分を" + monthLabel(paymentMonth) + "末に精算します。" +
+        monthLabel(sourceMonth) + "分を" + monthLabel(paymentMonth) + "末に精算します。精算後に届いた" +
+        monthLabel(sourceMonth) + "分の明細は、翌月の精算に入ります。" +
         (sourceSummary && sourceSummary.monthlyRepayment
           ? " 返済 " + yen(sourceSummary.monthlyRepayment) + " を含みます。"
           : "");
@@ -2440,15 +2462,17 @@
     var summary = calculateSummary();
 
     var selectedMonthLabel = monthLabel(state.currentMonth);
-    var settlementMonth = addMonths(state.currentMonth, 1);
     renderImportReminder();
     renderPaymentDueCard();
     document.getElementById("settlementTitle").textContent = selectedMonthLabel + "分の精算見込み";
     document.getElementById("breakdownTitle").textContent = selectedMonthLabel + "分の精算内訳";
     document.getElementById("settlementTiming").textContent =
-      fullMonthLabel(settlementMonth) + "末に確定・精算";
+      fullMonthLabel(state.currentMonth) + "末に精算";
     document.getElementById("settlementNote").textContent =
-      monthPeriodLabel(state.currentMonth) + "に使った共同支出・立替・返済・繰越を集計しています。";
+      monthPeriodLabel(state.currentMonth) + "に使った共同支出・立替・返済・繰越を集計しています。" +
+      (summary.lateTransactions.length
+        ? "前月までの精算後に追加された " + summary.lateTransactions.length + "件も含みます。"
+        : "");
     document.getElementById("monthlyTotalTitle").textContent = selectedMonthLabel + "分の生活費";
     document.getElementById("monthlyRepaymentTitle").textContent = selectedMonthLabel + "分の返済";
     document.getElementById("monthlyShareTitle").textContent = selectedMonthLabel + "分の負担";
@@ -2662,9 +2686,23 @@
       '</small></span><strong>' + yen(Math.abs(summary.repaymentNet)) + '</strong></div>' +
       '<div class="breakdown-row"><span>繰越金<small>' +
       carryoverBreakdownMeta +
-      '</small></span><strong>' + yen(Math.abs(carryoverNet)) + '</strong></div>';
+      '</small></span><strong>' + yen(Math.abs(carryoverNet)) + '</strong></div>' +
+      lateBreakdownRow(summary);
 
     bindDynamicButtons();
+  }
+
+  // 前月までの精算後に追加され、この月の精算に入った明細（生活費の差額・立替に含まれている分の参考表示）。
+  function lateBreakdownRow(summary) {
+    var late = summary.lateTransactions || [];
+    if (!late.length) return "";
+    var months = late.map(function (tx) { return monthKeyFromDate(tx.date); })
+      .filter(function (month, index, list) { return list.indexOf(month) === index; })
+      .sort()
+      .map(monthLabel);
+    return '<div class="breakdown-row breakdown-note-row"><span>うち前月までの追加分<small>' +
+      escapeHtml(months.join("・") + "利用 " + late.length + "件（差額・立替に含む）") +
+      '</small></span><strong>' + yen(summary.lateTotal) + '</strong></div>';
   }
 
   function openTransactionEditor(id, mode) {
@@ -3506,7 +3544,7 @@
   });
 
   document.getElementById("payCurrentSettlementButton").addEventListener("click", async function () {
-    var sourceMonth = addMonths(state.currentMonth, -1);
+    var sourceMonth = state.currentMonth;
     if (sourceMonth < OPERATION_START_MONTH || state.currentMonth > actualMonthKey()) return;
     if (paidSettlementRecord(sourceMonth)) return;
 
@@ -3561,12 +3599,13 @@
   });
 
   document.getElementById("undoPaymentButton").addEventListener("click", async function () {
-    var sourceMonth = addMonths(state.currentMonth, -1);
+    var sourceMonth = state.currentMonth;
     var record = paidSettlementRecord(sourceMonth);
     if (!record) return;
 
     var ok = window.confirm(
-      monthLabel(sourceMonth) + "分の支払い済み記録を取り消しますか？"
+      monthLabel(sourceMonth) + "分の支払い済み記録を取り消しますか？" +
+      "\n（精算後に追加されて翌月の精算に入った明細は、翌月のままです）"
     );
     if (!ok) return;
 
@@ -3594,7 +3633,7 @@
     var livingOut = carryOutRecord("living");
     if (!livingOut) return;
     if (paidSettlementRecord(state.currentMonth)) {
-      alert("この月は精算済みです。繰越を取り消す場合は、先に翌月の支払済み記録を取り消してください。");
+      alert("この月は精算済みです。繰越を取り消す場合は、先にこの月の支払済み記録を取り消してください。");
       return;
     }
 
@@ -3624,7 +3663,7 @@
       var available = Math.abs(summary.livingSettlement);
       if (!available) return;
       if (paidSettlementRecord(state.currentMonth)) {
-        alert("この月は精算済みです。繰越を変更する場合は、先に翌月の支払済み記録を取り消してください。");
+        alert("この月は精算済みです。繰越を変更する場合は、先にこの月の支払済み記録を取り消してください。");
         return;
       }
 
@@ -3681,8 +3720,10 @@
     });
     if (!tx) return;
 
-    if (paidSettlementRecord(monthKeyFromDate(tx.date))) {
-      alert("この月は精算済みです。削除する場合は、先に翌月の「支払済みを取り消す」を実行してください。");
+    var deleteSettlementMonth = txSettlementMonth(tx);
+    if (paidSettlementRecord(deleteSettlementMonth)) {
+      alert(monthLabel(deleteSettlementMonth) + "の精算に入っている明細です。削除する場合は、先に" +
+        monthLabel(deleteSettlementMonth) + "の「支払いを取り消す」を実行してください。");
       return;
     }
 
@@ -3745,14 +3786,11 @@
       (existing.payer || "") !== tx.payer ||
       (existing.me_share_amount == null ? null : Number(existing.me_share_amount)) !== tx.me_share_amount;
 
-    if (
-      sensitiveChanged &&
-      (
-        paidSettlementRecord(monthKeyFromDate(existing.date)) ||
-        paidSettlementRecord(monthKeyFromDate(tx.date))
-      )
-    ) {
-      alert("精算済みの月の金額・日付・支払者・支出区分・分け方は変更できません。先に支払済み記録を取り消してください。");
+    // ロックは明細が入っている精算月で判定する。日付を別の月へ変えた場合は、DB が改めて精算月を決める。
+    var existingSettlementMonth = txSettlementMonth(existing);
+    if (sensitiveChanged && paidSettlementRecord(existingSettlementMonth)) {
+      alert(monthLabel(existingSettlementMonth) + "の精算に入っている明細の金額・日付・支払者・支出区分・分け方は変更できません。先に" +
+        monthLabel(existingSettlementMonth) + "の支払済み記録を取り消してください。");
       return;
     }
 
@@ -3833,9 +3871,14 @@
       alert(monthLabel(OPERATION_START_MONTH) + "運用開始前の支出は追加できません。");
       return;
     }
-    if (paidSettlementRecord(monthKeyFromDate(tx.date))) {
-      alert("この月は精算済みです。追加する場合は先に支払済み記録を取り消してください。");
-      return;
+    var manualUsedMonth = monthKeyFromDate(tx.date);
+    var manualSettlementMonth = settlementMonthForNewDate(tx.date);
+    if (manualSettlementMonth !== manualUsedMonth) {
+      var lateOk = window.confirm(
+        monthLabel(manualUsedMonth) + "分は精算済みです。\nこの支出は" + monthLabel(manualSettlementMonth) +
+        "の精算に入ります（分析・明細一覧は" + monthLabel(manualUsedMonth) + "のまま）。\n追加しますか？"
+      );
+      if (!lateOk) return;
     }
 
     var saveButton = event.submitter || this.querySelector('button[value="save"]');
@@ -3949,7 +3992,7 @@
     var amount = Number(document.getElementById("repaymentInput").value || 0);
     if (!Number.isFinite(amount) || amount < 0 || !state.data.repayment_plan) return;
     if (paidSettlementRecord(state.currentMonth)) {
-      alert("この月は精算済みです。返済額を変更する場合は、先に翌月の支払済み記録を取り消してください。");
+      alert("この月は精算済みです。返済額を変更する場合は、先にこの月の支払済み記録を取り消してください。");
       return;
     }
 
