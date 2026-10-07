@@ -107,33 +107,46 @@
     return null;
   }
 
-  // 支出区分が「立替」のとき、立替の向きを文字で示し、店舗ルールへの保存を止める。
-  // fields は { scope, payer, hint, ruleMode } の要素ID。
-  var ADVANCE_FORM_FIELDS = {
-    manual:{ scope:"manualExpenseScope", payer:"manualExpensePayer", hint:"manualExpenseAdvanceHint", ruleMode:"manualExpenseRuleMode" },
-    classify:{ scope:"classifyScope", payer:"classifyPayer", hint:"classifyAdvanceHint", ruleMode:"ruleMode" }
-  };
+  // 「払った人・誰の分？・分け方」の入力部品（split-editor.js）。支出の追加と明細の編集で共通。
+  // 店舗ルールに保存できるのは「ふたり・いつもの割合」と「個人の分」だけ（立替・金額指定は今回だけ）。
+  var splitEditors = {};
 
-  function advanceHintText(payer) {
-    var lender = payer === "partner" ? "partner" : "me";
-    var borrower = lender === "me" ? "partner" : "me";
-    return memberName(lender) + "が" + memberName(borrower) + "の分を立て替え → 精算で" +
-      memberName(borrower) + "が" + memberName(lender) + "へ全額払います（共同費の集計には入りません）";
+  function splitAllowsMerchantRule(splitState) {
+    var kind = window.KakeiboSplit.kindOf(splitState);
+    return kind === "personal" || (kind === "shared" && splitState.mode !== "amount");
   }
 
-  function syncAdvanceFields(formKey) {
-    var ids = ADVANCE_FORM_FIELDS[formKey];
-    if (!ids) return;
-    var scope = document.getElementById(ids.scope);
-    var payer = document.getElementById(ids.payer);
-    var hint = document.getElementById(ids.hint);
-    var ruleMode = document.getElementById(ids.ruleMode);
-    if (!scope || !payer || !hint || !ruleMode) return;
-    var isAdvance = scope.value === "advance";
-    hint.textContent = isAdvance ? advanceHintText(payer.value) : "";
-    hint.classList.toggle("hidden", !isAdvance);
-    if (isAdvance) ruleMode.value = "once";
-    ruleMode.disabled = isAdvance;
+  function createSplitEditor(key, containerId, amountInputId, ruleModeId) {
+    var container = document.getElementById(containerId);
+    var amountInput = document.getElementById(amountInputId);
+    var ruleMode = document.getElementById(ruleModeId);
+    if (!container || !amountInput) return;
+    splitEditors[key] = window.KakeiboSplitEditor.create({
+      container:container,
+      amountInput:amountInput,
+      memberName:memberName,
+      settings:function () { return (state.data && state.data.settings) || null; },
+      onChange:function (splitState) {
+        if (!ruleMode) return;
+        var allowed = splitAllowsMerchantRule(splitState);
+        if (!allowed) ruleMode.value = "once";
+        ruleMode.disabled = !allowed;
+      }
+    });
+  }
+
+  // 入力部品の状態を、保存する明細の項目（scope / payer / me_share_amount）にする。
+  function splitFieldsFor(key, amount) {
+    return window.KakeiboSplit.toTransactionFields(amount, splitEditors[key].getState());
+  }
+
+  function splitMetaLabel(tx) {
+    if (tx.scope === "advance") return "立替";
+    if (tx.scope === "shared" && window.KakeiboSettlement.hasCustomSplit(tx)) {
+      return "ふたり " + memberName("me") + " " + yen(tx.me_share_amount) + " / " +
+        memberName("partner") + " " + yen(Number(tx.amount || 0) - Number(tx.me_share_amount || 0));
+    }
+    return "";
   }
 
   function isUnsortedTx(tx) {
@@ -725,8 +738,14 @@
     manualMerchantSelectedValue = normalizeMerchant(rule.merchant_name || "");
     if (rule.mode === "auto") {
       if (rule.category_name) document.getElementById("manualExpenseCategory").value = rule.category_name;
-      document.getElementById("manualExpenseScope").value = toUiScope(rule.scope) || "shared";
-      syncAdvanceFields("manual");
+      var current = splitEditors.manual.getState();
+      var personal = rule.scope === "mine" || rule.scope === "partner";
+      splitEditors.manual.setState({
+        payer:current.payer,
+        forWhom:personal ? current.payer : "both",
+        mode:"rate",
+        meAmount:null
+      });
     }
     hideManualMerchantSuggestions();
   }
@@ -1794,7 +1813,8 @@
 
   function ledgerTxRow(tx) {
     var title = tx.merchant_name + "（" + (tx.category_name || "未設定") + "）　" + shortDate(tx.date);
-    var meta = (tx.scope === "advance" ? "立替 ｜ " : "") + payerLabel(tx.payer) + " ｜ " + sourceDisplay(tx);
+    var splitLabel = splitMetaLabel(tx);
+    var meta = (splitLabel ? splitLabel + " ｜ " : "") + payerLabel(tx.payer) + " ｜ " + sourceDisplay(tx);
     return '<button type="button" class="transaction-row transaction-edit-row ledger-transaction-row" data-edit-tx="' + tx.id + '">' +
       '<div class="tx-icon">' + escapeHtml(iconFor(tx)) + '</div>' +
       '<div class="tx-main"><strong>' + escapeHtml(title) + '</strong><small>' +
@@ -2597,6 +2617,12 @@
     document.getElementById("settlementDirection").textContent =
       directionText(summary.finalSettlement);
 
+    // 入力部品の表示名・負担率を最新にする（入力中のダイアログは描き直さない）。
+    Object.keys(splitEditors).forEach(function (key) {
+      var dialog = document.getElementById(key === "manual" ? "manualExpenseDialog" : "classifyDialog");
+      if (!dialog || !dialog.open) splitEditors[key].render();
+    });
+
     renderHomeCategoryChart(summary);
     renderAnalysisChart();
 
@@ -2655,9 +2681,7 @@
     document.getElementById("classifyMerchantName").value = tx.merchant_name || "";
     document.getElementById("classifyAmount").value = String(tx.amount == null ? "" : tx.amount);
     document.getElementById("classifyCategory").value = tx.category_name || "";
-    document.getElementById("classifyScope").value = toUiScope(tx.scope) || "shared";
-    document.getElementById("classifyPayer").value = tx.payer || "me";
-    syncAdvanceFields("classify");
+    splitEditors.classify.setState(window.KakeiboSplit.fromTransaction(tx));
     document.getElementById("classifyMemo").value = tx.memo || "";
     document.getElementById("ruleMode").value = "once";
     renderTransactionSourceMeta(tx);
@@ -3694,11 +3718,16 @@
       merchant_name:document.getElementById("classifyMerchantName").value.trim(),
       amount:Number(document.getElementById("classifyAmount").value || 0),
       category_name:document.getElementById("classifyCategory").value,
-      scope:toDbScope(document.getElementById("classifyScope").value, document.getElementById("classifyPayer").value),
-      payer:document.getElementById("classifyPayer").value,
       memo:document.getElementById("classifyMemo").value.trim()
     };
-    var remember = document.getElementById("ruleMode").value === "merchant" && tx.scope !== "advance";
+    var classifySplitError = splitEditors.classify.errorMessage();
+    if (classifySplitError) {
+      alert(classifySplitError);
+      return;
+    }
+    Object.assign(tx, splitFieldsFor("classify", tx.amount));
+    var remember = document.getElementById("ruleMode").value === "merchant" &&
+      splitAllowsMerchantRule(splitEditors.classify.getState());
 
     if (!tx.date || !tx.merchant_name || tx.amount === 0 || !tx.category_name) return;
     if (
@@ -3713,7 +3742,8 @@
       existing.date !== tx.date ||
       Number(existing.amount) !== Number(tx.amount) ||
       (existing.scope || "") !== tx.scope ||
-      (existing.payer || "") !== tx.payer;
+      (existing.payer || "") !== tx.payer ||
+      (existing.me_share_amount == null ? null : Number(existing.me_share_amount)) !== tx.me_share_amount;
 
     if (
       sensitiveChanged &&
@@ -3722,7 +3752,7 @@
         paidSettlementRecord(monthKeyFromDate(tx.date))
       )
     ) {
-      alert("精算済みの月の金額・日付・支払者・支出区分は変更できません。先に支払済み記録を取り消してください。");
+      alert("精算済みの月の金額・日付・支払者・支出区分・分け方は変更できません。先に支払済み記録を取り消してください。");
       return;
     }
 
@@ -3742,13 +3772,8 @@
     }
   });
 
-  Object.keys(ADVANCE_FORM_FIELDS).forEach(function (formKey) {
-    var ids = ADVANCE_FORM_FIELDS[formKey];
-    [ids.scope, ids.payer].forEach(function (id) {
-      var el = document.getElementById(id);
-      if (el) el.addEventListener("change", function () { syncAdvanceFields(formKey); });
-    });
-  });
+  createSplitEditor("manual", "manualExpenseSplit", "manualExpenseAmount", "manualExpenseRuleMode");
+  createSplitEditor("classify", "classifySplit", "classifyAmount", "ruleMode");
 
   var manualExpenseNameInput = document.getElementById("manualExpenseName");
   var manualExpenseMerchantSuggestions = document.getElementById("manualExpenseMerchantSuggestions");
@@ -3792,11 +3817,16 @@
       merchant_name:document.getElementById("manualExpenseName").value.trim(),
       amount:Number(document.getElementById("manualExpenseAmount").value || 0),
       category_name:document.getElementById("manualExpenseCategory").value,
-      scope:toDbScope(document.getElementById("manualExpenseScope").value, document.getElementById("manualExpensePayer").value),
-      payer:document.getElementById("manualExpensePayer").value,
       memo:document.getElementById("manualExpenseMemo").value.trim()
     };
-    var remember = document.getElementById("manualExpenseRuleMode").value === "merchant" && tx.scope !== "advance";
+    var manualSplitError = splitEditors.manual.errorMessage();
+    if (manualSplitError) {
+      alert(manualSplitError);
+      return;
+    }
+    Object.assign(tx, splitFieldsFor("manual", tx.amount));
+    var remember = document.getElementById("manualExpenseRuleMode").value === "merchant" &&
+      splitAllowsMerchantRule(splitEditors.manual.getState());
 
     if (!tx.date || !tx.merchant_name || tx.amount === 0 || !tx.category_name) return;
     if (monthKeyFromDate(tx.date) < OPERATION_START_MONTH) {
@@ -3815,7 +3845,7 @@
       await window.kakeiboDb.addManualTransaction(tx, remember);
       state.data = await window.kakeiboDb.getInitialData();
       document.getElementById("manualExpenseForm").reset();
-      syncAdvanceFields("manual");
+      splitEditors.manual.setState({ payer:"me", forWhom:"both", mode:"rate", meAmount:null });
       manualMerchantSelectedValue = "";
       hideManualMerchantSuggestions();
       setDefaultEntryDates();

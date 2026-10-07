@@ -173,7 +173,8 @@ create table public.transactions (
   card_provider text,
   card_label text,
   card_id bigint,
-  import_batch_id bigint
+  import_batch_id bigint,
+  me_share_amount integer
 );
 
 
@@ -231,6 +232,7 @@ alter table public.repayments add constraint repayments_pkey PRIMARY KEY (id);
 alter table public.transactions add constraint transactions_amount_check CHECK ((amount <> 0));
 alter table public.transactions add constraint transactions_payer_check CHECK ((payer = ANY (ARRAY['me'::text, 'partner'::text])));
 alter table public.transactions add constraint transactions_pkey PRIMARY KEY (id);
+alter table public.transactions add constraint transactions_me_share_amount_check CHECK (((me_share_amount IS NULL) OR ((scope = 'shared'::text) AND ((me_share_amount >= LEAST(0, amount)) AND (me_share_amount <= GREATEST(0, amount))))));
 alter table public.transactions add constraint transactions_scope_check CHECK ((scope = ANY (ARRAY['shared'::text, 'mine'::text, 'partner'::text, 'advance'::text])));
 alter table public.transactions add constraint transactions_source_check CHECK ((source = ANY (ARRAY['manual'::text, 'epos_email'::text, 'rakuten_email'::text, 'csv'::text, 'pdf'::text])));
 alter table public.transactions add constraint transactions_source_message_item_key UNIQUE (source_message_id, source_item_index);
@@ -463,12 +465,12 @@ end;
 $function$
 ;
 
-CREATE OR REPLACE FUNCTION private.kakeibo_guard_transaction_settlement()
- RETURNS trigger
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO ''
-AS $function$
+create or replace function private.kakeibo_guard_transaction_settlement()
+ returns trigger
+ language plpgsql
+ security definer
+ set search_path to ''
+as $function$
 begin
   if tg_op = 'INSERT' then
     if private.kakeibo_month_is_settled(new.transaction_date) then
@@ -486,7 +488,8 @@ begin
      or old.amount is distinct from new.amount
      or old.scope is distinct from new.scope
      or old.payer is distinct from new.payer
-     or old.status is distinct from new.status then
+     or old.status is distinct from new.status
+     or old.me_share_amount is distinct from new.me_share_amount then
     if private.kakeibo_month_is_settled(old.transaction_date)
        or private.kakeibo_month_is_settled(new.transaction_date) then
       raise exception 'SETTLED_MONTH_LOCKED';
@@ -495,8 +498,7 @@ begin
 
   return new;
 end;
-$function$
-;
+$function$;
 
 CREATE OR REPLACE FUNCTION private.kakeibo_is_allowed()
  RETURNS boolean
@@ -513,17 +515,18 @@ AS $function$
 $function$
 ;
 
-CREATE OR REPLACE FUNCTION private.kakeibo_living_current(p_month date)
- RETURNS integer
- LANGUAGE sql
- STABLE SECURITY DEFINER
- SET search_path TO ''
-AS $function$
+create or replace function private.kakeibo_living_current(p_month date)
+ returns integer
+ language sql
+ stable security definer
+ set search_path to ''
+as $function$
   with share as (
     select coalesce((select me_share_percent from public.app_settings where id = 1), 50) as pct
   ), tx as (
     select
-      coalesce(sum(t.amount) filter (where t.scope = 'shared'), 0)::numeric as total,
+      coalesce(sum(t.amount) filter (where t.scope = 'shared' and t.me_share_amount is null), 0)::numeric as default_total,
+      coalesce(sum(t.me_share_amount) filter (where t.scope = 'shared' and t.me_share_amount is not null), 0)::numeric as custom_me_share,
       coalesce(sum(t.amount) filter (where t.scope = 'shared' and t.payer = 'me'), 0)::numeric as paid_by_me,
       coalesce(sum(t.amount) filter (where t.scope = 'advance' and t.payer = 'me'), 0)::numeric as advance_by_me,
       coalesce(sum(t.amount) filter (where t.scope = 'advance' and t.payer = 'partner'), 0)::numeric as advance_by_partner
@@ -534,12 +537,13 @@ AS $function$
       and date_trunc('month', t.transaction_date)::date = p_month
   )
   select (
-    tx.paid_by_me - floor(tx.total * share.pct / 100.0 + 0.5)
+    tx.paid_by_me
+    - floor(tx.default_total * share.pct / 100.0 + 0.5)
+    - tx.custom_me_share
     + tx.advance_by_me - tx.advance_by_partner
   )::integer
   from tx, share;
-$function$
-;
+$function$;
 
 CREATE OR REPLACE FUNCTION private.kakeibo_month_is_settled(p_date date)
  RETURNS boolean

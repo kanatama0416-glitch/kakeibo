@@ -37,7 +37,7 @@ jobs:
       - name: Collect site files
         run: |
           mkdir -p _site/assets _site/test _site/lib
-          cp index.html boot.js config.js supabase-client.js app.js auth.js styles.css \
+          cp index.html boot.js config.js supabase-client.js split-editor.js app.js auth.js styles.css \
              manifest.webmanifest apple-touch-icon.png _site/
           cp assets/*.webp _site/assets/
           cp lib/*.js _site/lib/

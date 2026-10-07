@@ -648,5 +648,18 @@ html,body,.app-shell{max-width:100%;overflow-x:hidden}
 .test-mode-badge{font-size:10px;color:#1f7a5a}
 .test-mode-banner{margin:0 16px 8px;padding:9px 12px;border-radius:14px;background:#fff4e3;color:#8a5b16;font-size:11px;font-weight:900;border:1px solid #efdbb8}
 
-/* 支出区分「立替」の向きの説明 */
-.advance-hint{margin:-4px 0 12px;padding:10px 12px;border-radius:12px;background:#fff6e8;border:1px solid #f1dcb6;color:#7a5418;font-size:11px;font-weight:800;line-height:1.5}
+/* 払った人・誰の分？・分け方（split-editor.js） */
+.split-editor{margin-top:14px}
+.split-field{margin-top:12px}
+.split-label{display:block;color:var(--muted);font-size:12px;font-weight:900;margin-bottom:6px}
+.split-segmented{display:flex;gap:6px}
+.split-option{flex:1 1 0;min-width:0;border:1px solid var(--line);background:#fff;color:#4b525c;border-radius:12px;padding:11px 6px;font-size:13px;font-weight:900;line-height:1.25;word-break:keep-all;overflow-wrap:anywhere}
+.split-option.active{background:var(--text);border-color:var(--text);color:#fff}
+.split-amounts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px}
+.split-amounts label{margin-top:6px}
+.split-effect{margin:12px 0 0;padding:10px 12px;border-radius:12px;background:#fff6e8;border:1px solid #f1dcb6;color:#7a5418;font-size:12px;font-weight:800;line-height:1.5}
+.split-error{margin:8px 0 0;color:#b4232a;font-size:12px;font-weight:800;line-height:1.5}
+
+/* iPhone Safari で日付欄が右にはみ出さないようにする */
+.dialog-card input[type=date]{display:block;min-width:0;max-width:100%;-webkit-appearance:none;appearance:none;text-align:left}
+.dialog-card input[type=date]::-webkit-date-and-time-value{text-align:left}

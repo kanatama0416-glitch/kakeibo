@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=20260927-1508">
   <link rel="icon" type="image/png" href="./apple-touch-icon.png?v=20260927-1508">
   <link rel="manifest" href="./manifest.webmanifest?v=20260927-1508">
-  <link rel="stylesheet" href="./styles.css?v=20261007-DOUBLESUBMIT1">
+  <link rel="stylesheet" href="./styles.css?v=20261007-SPLIT1">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -434,20 +434,7 @@
       <label>店舗・内容<input id="classifyMerchantName" type="text" required></label>
       <label>金額<input id="classifyAmount" type="number" step="1" required></label>
       <label>費目<select id="classifyCategory" required></select></label>
-      <label>支出区分
-        <select id="classifyScope">
-          <option value="shared">共同生活費</option>
-          <option value="advance">立替（相手の分を立て替えた）</option>
-          <option value="excluded">対象外（個人の買い物）</option>
-        </select>
-      </label>
-      <label>支払った人
-        <select id="classifyPayer">
-          <option value="me">にゃち</option>
-          <option value="partner">うー</option>
-        </select>
-      </label>
-      <p id="classifyAdvanceHint" class="advance-hint hidden" aria-live="polite"></p>
+      <div id="classifySplit" class="split-editor"></div>
       <div id="transactionSourceMeta" class="transaction-source-meta"></div>
       <button id="transactionImportHistoryButton" class="source-link-button hidden" type="button">この取込履歴を見る</button>
       <label>メモ<input id="classifyMemo" type="text" placeholder="任意"></label>
@@ -473,20 +460,7 @@
       </div>
       <label>金額<input id="manualExpenseAmount" type="number" step="1" placeholder="3000（返金は -1000）" required></label>
       <label>費目<select id="manualExpenseCategory" required></select></label>
-      <label>支出区分
-        <select id="manualExpenseScope">
-          <option value="shared">共同生活費</option>
-          <option value="advance">立替（相手の分を立て替えた）</option>
-          <option value="excluded">対象外（個人の買い物）</option>
-        </select>
-      </label>
-      <label>支払った人
-        <select id="manualExpensePayer">
-          <option value="me">にゃち</option>
-          <option value="partner">うー</option>
-        </select>
-      </label>
-      <p id="manualExpenseAdvanceHint" class="advance-hint hidden" aria-live="polite"></p>
+      <div id="manualExpenseSplit" class="split-editor"></div>
       <label>メモ<input id="manualExpenseMemo" type="text" placeholder="任意"></label>
       <label>この設定
         <select id="manualExpenseRuleMode">
@@ -612,6 +586,6 @@
   <script src="./config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="./boot.js?v=20261007-DOUBLESUBMIT1"></script>
+  <script src="./boot.js?v=20261007-SPLIT1"></script>
 </body>
 </html>

@@ -87,7 +87,7 @@
 
     while (true) {
       var result = await client.from("transactions")
-        .select("id,transaction_date,merchant_name,merchant_raw,amount,scope,payer,status,source,memo,is_demo,card_provider,card_label,card_id,import_batch_id,created_at,categories(name)")
+        .select("id,transaction_date,merchant_name,merchant_raw,amount,scope,payer,me_share_amount,status,source,memo,is_demo,card_provider,card_label,card_id,import_batch_id,created_at,categories(name)")
         .eq("is_demo", false)
         .order("transaction_date", { ascending:false })
         .order("id", { ascending:false })
@@ -177,6 +177,7 @@
           category_name:categoryName(t),
           scope:t.scope,
           payer:t.payer,
+          me_share_amount:t.me_share_amount == null ? null : Number(t.me_share_amount),
           status:t.status,
           source:t.source,
           memo:t.memo,
@@ -277,6 +278,14 @@
     if (result.error) throw result.error;
   }
 
+  // 金額を指定して分けた共同支出の、にゃちの負担額。共同以外・未指定は null（DB の制約と同じ）。
+  function splitAmountFor(tx) {
+    if (tx.scope !== "shared" || tx.me_share_amount === null || tx.me_share_amount === undefined) return null;
+    var value = Number(tx.me_share_amount);
+    if (!Number.isInteger(value)) throw new Error("負担額は整数で指定してください。");
+    return value;
+  }
+
   async function updateTransaction(id, tx, rememberMerchant) {
     var categoryResult = await client.from("categories")
       .select("id")
@@ -300,6 +309,7 @@
         category_id:categoryId,
         scope:tx.scope,
         payer:tx.payer,
+        me_share_amount:splitAmountFor(tx),
         status:amount < 0 ? "refunded" : "confirmed",
         memo:tx.memo || null
       })
@@ -342,11 +352,12 @@
       category_id:categoryId,
       scope:tx.scope,
       payer:tx.payer,
+      me_share_amount:splitAmountFor(tx),
       status:amount < 0 ? "refunded" : "confirmed",
       source:"manual",
       memo:tx.memo || null,
       is_demo:false
-    }).select("id,transaction_date,merchant_name,amount,scope,payer,status,source,memo").single();
+    }).select("id,transaction_date,merchant_name,amount,scope,payer,me_share_amount,status,source,memo").single();
 
     if (result.error) throw result.error;
 

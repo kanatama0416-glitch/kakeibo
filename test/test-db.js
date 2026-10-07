@@ -101,7 +101,7 @@
     var row=data.transactions.find(function(x){return Number(x.id)===Number(id);});
     if(!row) return;
     var before=clone(row);
-    Object.assign(row,{date:tx.date,merchant_name:tx.merchant_name,amount:Number(tx.amount),category_name:tx.category_name,scope:tx.scope,payer:tx.payer,memo:tx.memo,status:Number(tx.amount)<0?"refunded":"confirmed"});
+    Object.assign(row,{date:tx.date,merchant_name:tx.merchant_name,amount:Number(tx.amount),category_name:tx.category_name,scope:tx.scope,payer:tx.payer,me_share_amount:tx.scope==="shared"&&tx.me_share_amount!=null?Number(tx.me_share_amount):null,memo:tx.memo,status:Number(tx.amount)<0?"refunded":"confirmed"});
     log("UPDATE","transactions",id,before,clone(row));
   }
   async function deleteTransaction(id) {
@@ -109,7 +109,7 @@
     if(i>=0){var before=data.transactions[i];data.transactions.splice(i,1);log("DELETE","transactions",id,clone(before),null);}
   }
   async function addManualTransaction(tx) {
-    var row={id:++ids.transaction,date:tx.date,merchant_name:tx.merchant_name,amount:Number(tx.amount),category_name:tx.category_name,scope:tx.scope,payer:tx.payer,status:Number(tx.amount)<0?"refunded":"confirmed",source:"manual",memo:tx.memo||""};
+    var row={id:++ids.transaction,date:tx.date,merchant_name:tx.merchant_name,amount:Number(tx.amount),category_name:tx.category_name,scope:tx.scope,payer:tx.payer,me_share_amount:tx.scope==="shared"&&tx.me_share_amount!=null?Number(tx.me_share_amount):null,status:Number(tx.amount)<0?"refunded":"confirmed",source:"manual",memo:tx.memo||""};
     data.transactions.push(row); log("INSERT","transactions",row.id,null,clone(row)); return clone(row);
   }
   async function importCsvTransactions(rows, batchMeta) {

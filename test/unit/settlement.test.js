@@ -125,3 +125,17 @@ test("うーが立て替えた分だけの月は、にゃちが払う向き（�
   assert.equal(dec.advanceNet, -3000);
   assert.equal(dec.livingSettlement, -3000);
 });
+
+test("金額で分けた共同支出は指定した負担額で精算し、生活費の合計には全額入る", function () {
+  var data = baseData();
+  data.transactions = [
+    tx(1, "2026-12-01", 1001, "partner"),                              // いつもの割合（月合計で丸める）
+    tx(2, "2026-12-02", 5000, "me", { me_share_amount:3000 }),          // にゃち 3,000 / うー 2,000
+    tx(3, "2026-12-03", -1000, "partner", { status:"refunded", me_share_amount:-400 })
+  ];
+  var dec = settlement.calculateSummary(data, "2026-12");
+  assert.equal(dec.total, 1001 + 5000 - 1000);
+  assert.equal(dec.myShare, 501 + 3000 - 400);
+  assert.equal(dec.partnerShare, dec.total - dec.myShare);
+  assert.equal(dec.livingCurrent, 5000 - (501 + 3000 - 400));
+});
