@@ -251,6 +251,8 @@
   }
 
   async function upsertMerchantRuleForTransaction(merchantName, categoryId, scope) {
+    // 立替は店舗ルールにしない（merchant_rules の scope は shared / mine / partner のみ）。
+    if (scope === "advance") return;
     var rulesResult = await client.from("merchant_rules")
       .select("id,merchant_name")
       .eq("is_demo", false);

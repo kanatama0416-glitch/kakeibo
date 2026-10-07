@@ -231,7 +231,7 @@ alter table public.repayments add constraint repayments_pkey PRIMARY KEY (id);
 alter table public.transactions add constraint transactions_amount_check CHECK ((amount <> 0));
 alter table public.transactions add constraint transactions_payer_check CHECK ((payer = ANY (ARRAY['me'::text, 'partner'::text])));
 alter table public.transactions add constraint transactions_pkey PRIMARY KEY (id);
-alter table public.transactions add constraint transactions_scope_check CHECK ((scope = ANY (ARRAY['shared'::text, 'mine'::text, 'partner'::text])));
+alter table public.transactions add constraint transactions_scope_check CHECK ((scope = ANY (ARRAY['shared'::text, 'mine'::text, 'partner'::text, 'advance'::text])));
 alter table public.transactions add constraint transactions_source_check CHECK ((source = ANY (ARRAY['manual'::text, 'epos_email'::text, 'rakuten_email'::text, 'csv'::text, 'pdf'::text])));
 alter table public.transactions add constraint transactions_source_message_item_key UNIQUE (source_message_id, source_item_index);
 alter table public.transactions add constraint transactions_status_check CHECK ((status = ANY (ARRAY['unclassified'::text, 'confirmed'::text, 'refunded'::text])));
@@ -523,15 +523,20 @@ AS $function$
     select coalesce((select me_share_percent from public.app_settings where id = 1), 50) as pct
   ), tx as (
     select
-      coalesce(sum(t.amount), 0)::numeric as total,
-      coalesce(sum(t.amount) filter (where t.payer = 'me'), 0)::numeric as paid_by_me
+      coalesce(sum(t.amount) filter (where t.scope = 'shared'), 0)::numeric as total,
+      coalesce(sum(t.amount) filter (where t.scope = 'shared' and t.payer = 'me'), 0)::numeric as paid_by_me,
+      coalesce(sum(t.amount) filter (where t.scope = 'advance' and t.payer = 'me'), 0)::numeric as advance_by_me,
+      coalesce(sum(t.amount) filter (where t.scope = 'advance' and t.payer = 'partner'), 0)::numeric as advance_by_partner
     from public.transactions t
     where t.is_demo = false
-      and t.scope = 'shared'
+      and t.scope in ('shared', 'advance')
       and t.status in ('confirmed','refunded')
       and date_trunc('month', t.transaction_date)::date = p_month
   )
-  select (tx.paid_by_me - floor(tx.total * share.pct / 100.0 + 0.5))::integer
+  select (
+    tx.paid_by_me - floor(tx.total * share.pct / 100.0 + 0.5)
+    + tx.advance_by_me - tx.advance_by_partner
+  )::integer
   from tx, share;
 $function$
 ;

@@ -83,23 +83,57 @@
   }
 
   function scopeLabel(scope) {
-    return scope === "shared" ? "共同" : (scope === "mine" || scope === "partner") ? "対象外" : "未設定";
+    if (scope === "shared") return "共同";
+    if (scope === "advance") return "立替";
+    return (scope === "mine" || scope === "partner") ? "対象外" : "未設定";
   }
 
-  // 画面上は「共同 / 対象外」の2区分。DBの制約（shared/mine/partner）は維持し、
+  // 画面上は「共同 / 立替 / 対象外」の3区分。
   // 対象外は支払った人に合わせて mine / partner で保存する。
+  // 立替（advance）は支払った人が相手の分を全額立て替えた明細で、その月の精算に全額入る。
   function toUiScope(scope) {
     if (scope === "shared") return "shared";
+    if (scope === "advance") return "advance";
     if (scope === "mine" || scope === "partner") return "excluded";
     return "";
   }
 
   function toDbScope(uiScope, payer) {
     if (uiScope === "shared") return "shared";
+    if (uiScope === "advance") return "advance";
     if (uiScope === "excluded" || uiScope === "mine" || uiScope === "partner") {
       return payer === "partner" ? "partner" : "mine";
     }
     return null;
+  }
+
+  // 支出区分が「立替」のとき、立替の向きを文字で示し、店舗ルールへの保存を止める。
+  // fields は { scope, payer, hint, ruleMode } の要素ID。
+  var ADVANCE_FORM_FIELDS = {
+    manual:{ scope:"manualExpenseScope", payer:"manualExpensePayer", hint:"manualExpenseAdvanceHint", ruleMode:"manualExpenseRuleMode" },
+    classify:{ scope:"classifyScope", payer:"classifyPayer", hint:"classifyAdvanceHint", ruleMode:"ruleMode" }
+  };
+
+  function advanceHintText(payer) {
+    var lender = payer === "partner" ? "partner" : "me";
+    var borrower = lender === "me" ? "partner" : "me";
+    return memberName(lender) + "が" + memberName(borrower) + "の分を立て替え → 精算で" +
+      memberName(borrower) + "が" + memberName(lender) + "へ全額払います（共同費の集計には入りません）";
+  }
+
+  function syncAdvanceFields(formKey) {
+    var ids = ADVANCE_FORM_FIELDS[formKey];
+    if (!ids) return;
+    var scope = document.getElementById(ids.scope);
+    var payer = document.getElementById(ids.payer);
+    var hint = document.getElementById(ids.hint);
+    var ruleMode = document.getElementById(ids.ruleMode);
+    if (!scope || !payer || !hint || !ruleMode) return;
+    var isAdvance = scope.value === "advance";
+    hint.textContent = isAdvance ? advanceHintText(payer.value) : "";
+    hint.classList.toggle("hidden", !isAdvance);
+    if (isAdvance) ruleMode.value = "once";
+    ruleMode.disabled = isAdvance;
   }
 
   function isUnsortedTx(tx) {
@@ -108,7 +142,9 @@
 
   function ledgerBucket(tx) {
     if (isUnsortedTx(tx)) return "unsorted";
-    return tx.scope === "shared" ? "shared" : "excluded";
+    if (tx.scope === "shared") return "shared";
+    if (tx.scope === "advance") return "advance";
+    return "excluded";
   }
 
   var DEFAULT_MEMBER_NAMES = { me:"にゃち", partner:"うー" };
@@ -690,6 +726,7 @@
     if (rule.mode === "auto") {
       if (rule.category_name) document.getElementById("manualExpenseCategory").value = rule.category_name;
       document.getElementById("manualExpenseScope").value = toUiScope(rule.scope) || "shared";
+      syncAdvanceFields("manual");
     }
     hideManualMerchantSuggestions();
   }
@@ -1757,7 +1794,7 @@
 
   function ledgerTxRow(tx) {
     var title = tx.merchant_name + "（" + (tx.category_name || "未設定") + "）　" + shortDate(tx.date);
-    var meta = payerLabel(tx.payer) + " ｜ " + sourceDisplay(tx);
+    var meta = (tx.scope === "advance" ? "立替 ｜ " : "") + payerLabel(tx.payer) + " ｜ " + sourceDisplay(tx);
     return '<button type="button" class="transaction-row transaction-edit-row ledger-transaction-row" data-edit-tx="' + tx.id + '">' +
       '<div class="tx-icon">' + escapeHtml(iconFor(tx)) + '</div>' +
       '<div class="tx-main"><strong>' + escapeHtml(title) + '</strong><small>' +
@@ -1900,9 +1937,10 @@
     return tx.category_name || "その他";
   }
 
+  // 使い道・分析の集計対象。個人間の立替は相手の個人的な支出なので含めない。
   function confirmedSpending(transactions) {
     return transactions.filter(function (t) {
-      return t.status === "confirmed" || t.status === "refunded";
+      return (t.status === "confirmed" || t.status === "refunded") && t.scope !== "advance";
     });
   }
 
@@ -2389,7 +2427,7 @@
     document.getElementById("settlementTiming").textContent =
       fullMonthLabel(settlementMonth) + "末に確定・精算";
     document.getElementById("settlementNote").textContent =
-      monthPeriodLabel(state.currentMonth) + "に使った共同支出・返済・繰越を集計しています。";
+      monthPeriodLabel(state.currentMonth) + "に使った共同支出・立替・返済・繰越を集計しています。";
     document.getElementById("monthlyTotalTitle").textContent = selectedMonthLabel + "分の生活費";
     document.getElementById("monthlyRepaymentTitle").textContent = selectedMonthLabel + "分の返済";
     document.getElementById("monthlyShareTitle").textContent = selectedMonthLabel + "分の負担";
@@ -2419,13 +2457,13 @@
 
     var ledgerTx = summary.monthTransactions.slice()
       .sort(function (a,b) { return b.date.localeCompare(a.date); });
-    var bucketCounts = { all:ledgerTx.length, unsorted:0, shared:0, excluded:0 };
+    var bucketCounts = { all:ledgerTx.length, unsorted:0, shared:0, advance:0, excluded:0 };
     ledgerTx.forEach(function (t) { bucketCounts[ledgerBucket(t)] += 1; });
     if (!state.filterTouched) state.filter = "all";
     var filtered = state.filter === "all" ? ledgerTx : ledgerTx.filter(function (t) {
       return ledgerBucket(t) === state.filter;
     });
-    var chipLabels = { all:"すべて", unsorted:"未仕分け", shared:"共同", excluded:"対象外" };
+    var chipLabels = { all:"すべて", unsorted:"未仕分け", shared:"共同", advance:"立替", excluded:"対象外" };
     document.querySelectorAll(".chip[data-filter]").forEach(function (chip) {
       var key = chip.getAttribute("data-filter");
       chip.classList.toggle("active", key === state.filter);
@@ -2436,6 +2474,7 @@
       all:fullMonthLabel(state.currentMonth) + "の明細はまだありません。",
       unsorted:ledgerTx.length ? "仕分けが必要な明細はありません。" : fullMonthLabel(state.currentMonth) + "の明細はまだありません。",
       shared:"共同の生活費として仕分けた明細はありません。",
+      advance:"立替にした明細はありません。",
       excluded:"対象外にした明細はありません。"
     };
     var emptyEl = document.getElementById("ledgerEmpty");
@@ -2561,9 +2600,12 @@
     renderAnalysisChart();
 
     var carryoverNet = Number(summary.carryInLiving || 0) - Number(summary.livingCarryOut || 0);
-    var livingBreakdownDirection = summary.livingCurrent === 0
+    var livingBreakdownDirection = summary.sharedDiff === 0
       ? "なし"
-      : directionText(summary.livingCurrent).replace("へ支払い","");
+      : directionText(summary.sharedDiff).replace("へ支払い","");
+    var advanceBreakdownDirection = summary.advanceNet === 0
+      ? "なし"
+      : directionText(summary.advanceNet).replace("へ支払い","");
     var repaymentBreakdownDirection = summary.repaymentNet === 0
       ? "なし"
       : directionText(summary.repaymentNet).replace("へ支払い","");
@@ -2584,7 +2626,10 @@
     document.getElementById("breakdownList").innerHTML =
       '<div class="breakdown-row"><span>生活費の差額<small>' +
       livingBreakdownDirection +
-      '</small></span><strong>' + yen(Math.abs(summary.livingCurrent)) + '</strong></div>' +
+      '</small></span><strong>' + yen(Math.abs(summary.sharedDiff)) + '</strong></div>' +
+      '<div class="breakdown-row"><span>個人間の立替<small>' +
+      escapeHtml(advanceBreakdownDirection) +
+      '</small></span><strong>' + yen(Math.abs(summary.advanceNet)) + '</strong></div>' +
       '<div class="breakdown-row"><span>立替金返済<small>' +
       repaymentBreakdownDirection +
       '</small></span><strong>' + yen(Math.abs(summary.repaymentNet)) + '</strong></div>' +
@@ -2611,6 +2656,7 @@
     document.getElementById("classifyCategory").value = tx.category_name || "";
     document.getElementById("classifyScope").value = toUiScope(tx.scope) || "shared";
     document.getElementById("classifyPayer").value = tx.payer || "me";
+    syncAdvanceFields("classify");
     document.getElementById("classifyMemo").value = tx.memo || "";
     document.getElementById("ruleMode").value = "once";
     renderTransactionSourceMeta(tx);
@@ -3651,7 +3697,7 @@
       payer:document.getElementById("classifyPayer").value,
       memo:document.getElementById("classifyMemo").value.trim()
     };
-    var remember = document.getElementById("ruleMode").value === "merchant";
+    var remember = document.getElementById("ruleMode").value === "merchant" && tx.scope !== "advance";
 
     if (!tx.date || !tx.merchant_name || tx.amount === 0 || !tx.category_name) return;
     if (
@@ -3693,6 +3739,14 @@
           : "明細の変更を保存できませんでした。"
       );
     }
+  });
+
+  Object.keys(ADVANCE_FORM_FIELDS).forEach(function (formKey) {
+    var ids = ADVANCE_FORM_FIELDS[formKey];
+    [ids.scope, ids.payer].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.addEventListener("change", function () { syncAdvanceFields(formKey); });
+    });
   });
 
   var manualExpenseNameInput = document.getElementById("manualExpenseName");
@@ -3737,7 +3791,7 @@
       payer:document.getElementById("manualExpensePayer").value,
       memo:document.getElementById("manualExpenseMemo").value.trim()
     };
-    var remember = document.getElementById("manualExpenseRuleMode").value === "merchant";
+    var remember = document.getElementById("manualExpenseRuleMode").value === "merchant" && tx.scope !== "advance";
 
     if (!tx.date || !tx.merchant_name || tx.amount === 0 || !tx.category_name) return;
     if (monthKeyFromDate(tx.date) < OPERATION_START_MONTH) {
@@ -3753,6 +3807,7 @@
       await window.kakeiboDb.addManualTransaction(tx, remember);
       state.data = await window.kakeiboDb.getInitialData();
       document.getElementById("manualExpenseForm").reset();
+      syncAdvanceFields("manual");
       manualMerchantSelectedValue = "";
       hideManualMerchantSuggestions();
       setDefaultEntryDates();

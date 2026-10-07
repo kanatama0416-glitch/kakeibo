@@ -646,3 +646,6 @@ html,body,.app-shell{max-width:100%;overflow-x:hidden}
 /* Test environment (?mode=test) */
 .test-mode-badge{font-size:10px;color:#1f7a5a}
 .test-mode-banner{margin:0 16px 8px;padding:9px 12px;border-radius:14px;background:#fff4e3;color:#8a5b16;font-size:11px;font-weight:900;border:1px solid #efdbb8}
+
+/* 支出区分「立替」の向きの説明 */
+.advance-hint{margin:-4px 0 12px;padding:10px 12px;border-radius:12px;background:#fff6e8;border:1px solid #f1dcb6;color:#7a5418;font-size:11px;font-weight:800;line-height:1.5}

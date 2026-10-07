@@ -95,3 +95,33 @@ test("負担率の設定が不正なら 50% として計算する", function () 
   data.settings = { me_share_percent:150 };
   assert.equal(settlement.calculateSummary(data, "2026-11").myShare, 5555);
 });
+
+test("個人間の立替は全額が精算に入り、共同費の合計・負担額には入らない", function () {
+  var data = baseData();
+  data.transactions = data.transactions.concat([
+    tx(9, "2026-10-10", 4000, "me", { scope:"advance" }),
+    tx(10, "2026-10-12", 1500, "partner", { scope:"advance" }),
+    tx(11, "2026-10-14", 800, "me", { scope:"advance", status:"unclassified" })
+  ]);
+  var oct = settlement.calculateSummary(data, "2026-10");
+  assert.equal(oct.total, 10001 + 3333 - 500);
+  assert.equal(oct.myShare, settlement.calculateSummary(baseData(), "2026-10").myShare);
+  assert.equal(oct.advanceByMe, 4000);
+  assert.equal(oct.advanceByPartner, 1500);
+  assert.equal(oct.advanceNet, 2500);
+  assert.equal(oct.livingCurrent, oct.sharedDiff + 2500);
+  assert.equal(oct.finalSettlement, 6584 + 2500);
+  // 翌月以降は変わらない（繰越 2,000 円はそのまま）
+  assert.equal(settlement.calculateSummary(data, "2026-11").finalSettlement, 679);
+  assert.equal(settlement.calculateSummary(data, "2026-12").finalSettlement, 4722);
+});
+
+test("うーが立て替えた分だけの月は、にゃちが払う向き（負）になる", function () {
+  var data = baseData();
+  data.transactions = [tx(1, "2026-12-03", 3000, "partner", { scope:"advance" })];
+  var dec = settlement.calculateSummary(data, "2026-12");
+  assert.equal(dec.total, 0);
+  assert.equal(dec.sharedDiff, 0);
+  assert.equal(dec.advanceNet, -3000);
+  assert.equal(dec.livingSettlement, -3000);
+});

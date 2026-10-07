@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=20260927-1508">
   <link rel="icon" type="image/png" href="./apple-touch-icon.png?v=20260927-1508">
   <link rel="manifest" href="./manifest.webmanifest?v=20260927-1508">
-  <link rel="stylesheet" href="./styles.css?v=20261006-REVIEWFIX2">
+  <link rel="stylesheet" href="./styles.css?v=20261007-ADVANCE1">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -169,6 +169,7 @@
             <button class="chip active" data-filter="all">すべて</button>
             <button class="chip" data-filter="unsorted">未仕分け</button>
             <button class="chip" data-filter="shared">共同</button>
+            <button class="chip" data-filter="advance">立替</button>
             <button class="chip" data-filter="excluded">対象外</button>
           </div>
           <div id="allTransactions" class="transaction-list"></div>
@@ -436,6 +437,7 @@
       <label>支出区分
         <select id="classifyScope">
           <option value="shared">共同生活費</option>
+          <option value="advance">立替（相手の分を立て替えた）</option>
           <option value="excluded">対象外（個人の買い物）</option>
         </select>
       </label>
@@ -445,6 +447,7 @@
           <option value="partner">うー</option>
         </select>
       </label>
+      <p id="classifyAdvanceHint" class="advance-hint hidden" aria-live="polite"></p>
       <div id="transactionSourceMeta" class="transaction-source-meta"></div>
       <button id="transactionImportHistoryButton" class="source-link-button hidden" type="button">この取込履歴を見る</button>
       <label>メモ<input id="classifyMemo" type="text" placeholder="任意"></label>
@@ -473,6 +476,7 @@
       <label>支出区分
         <select id="manualExpenseScope">
           <option value="shared">共同生活費</option>
+          <option value="advance">立替（相手の分を立て替えた）</option>
           <option value="excluded">対象外（個人の買い物）</option>
         </select>
       </label>
@@ -482,6 +486,7 @@
           <option value="partner">うー</option>
         </select>
       </label>
+      <p id="manualExpenseAdvanceHint" class="advance-hint hidden" aria-live="polite"></p>
       <label>メモ<input id="manualExpenseMemo" type="text" placeholder="任意"></label>
       <label>この設定
         <select id="manualExpenseRuleMode">
@@ -607,6 +612,6 @@
   <script src="./config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="./boot.js?v=20261006-LOGICSPLIT1"></script>
+  <script src="./boot.js?v=20261007-ADVANCE1"></script>
 </body>
 </html>
