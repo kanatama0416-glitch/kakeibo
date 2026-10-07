@@ -3,7 +3,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "20261007-ADVANCE1";
+  var VERSION = "20261007-ADVANCE2";
 
   // 画面に依存しない計算・判定（単体テストあり）。app.js より先に読み込む。
   var LOGIC_SCRIPTS = ["./lib/core.js", "./lib/settlement.js", "./lib/card-import.js"].map(function (src) {

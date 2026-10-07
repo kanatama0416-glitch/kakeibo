@@ -1937,10 +1937,11 @@
     return tx.category_name || "その他";
   }
 
-  // 使い道・分析の集計対象。個人間の立替は相手の個人的な支出なので含めない。
+  // 使い道・分析の集計対象は共同の生活費だけ。
+  // 対象外（個人の買い物）と個人間の立替は個人の支出なので含めない（README の運用ルール）。
   function confirmedSpending(transactions) {
     return transactions.filter(function (t) {
-      return (t.status === "confirmed" || t.status === "refunded") && t.scope !== "advance";
+      return (t.status === "confirmed" || t.status === "refunded") && t.scope === "shared";
     });
   }
 
