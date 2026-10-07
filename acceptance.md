@@ -290,7 +290,7 @@
 6. 画面の精算額とDB（private.kakeibo_settlement_breakdown）の精算額が一致する（精算月で集計）。
 7. 精算済みの月の精算に入った明細は、金額・日付などの変更と削除ができない。後から次月の精算に入った明細は変更できる。精算月は画面から直接変更できない。
 8. 前月のカード明細リマインドは、前月を精算済みにしても取り込むまで消えない。
-9. 本番DBへ migration 20261008000000、GitHub Pages へ SETTLEMONTH1 を公開する。
+9. 本番DBへ migration 20261007235635、GitHub Pages へ SETTLEMONTH1 を公開する。
 
 ### 検証記録
 
