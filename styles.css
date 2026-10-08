@@ -663,3 +663,8 @@ html,body,.app-shell{max-width:100%;overflow-x:hidden}
 /* iPhone Safari で日付欄が右にはみ出さないようにする */
 .dialog-card input[type=date]{display:block;min-width:0;max-width:100%;-webkit-appearance:none;appearance:none;text-align:left}
 .dialog-card input[type=date]::-webkit-date-and-time-value{text-align:left}
+
+/* 明細一覧：店名だけを省略し、日付は常に表示する */
+.ledger-transaction-row .tx-main strong.tx-title{display:flex;align-items:baseline;gap:6px;min-width:0}
+.ledger-transaction-row .tx-title-text{min-width:0;flex:0 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ledger-transaction-row .tx-title-date{flex:none;color:var(--muted);font-size:12px;font-weight:600}

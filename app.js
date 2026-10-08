@@ -85,7 +85,7 @@
   function scopeLabel(scope) {
     if (scope === "shared") return "共同";
     if (scope === "advance") return "立替";
-    return (scope === "mine" || scope === "partner") ? "対象外" : "未設定";
+    return (scope === "mine" || scope === "partner") ? "対象外" : UNSORTED_LABEL;
   }
 
   // 画面上は「共同 / 立替 / 対象外」の3区分。
@@ -151,6 +151,16 @@
 
   function isUnsortedTx(tx) {
     return tx.status === "unclassified" || !tx.scope;
+  }
+
+  // 仕分け前（共同・立替・対象外が決まっていない）の明細の呼び方。画面全体でこの言葉にそろえる。
+  var UNSORTED_LABEL = "未仕分け";
+  // 仕分け済みだが費目がない明細（費目を削除した場合など）の呼び方。
+  var NO_CATEGORY_LABEL = "費目なし";
+
+  function categoryLabel(tx) {
+    if (isUnsortedTx(tx) && !tx.category_name) return UNSORTED_LABEL;
+    return tx.category_name || NO_CATEGORY_LABEL;
   }
 
   function ledgerBucket(tx) {
@@ -378,7 +388,7 @@
     if (["payer","lender","borrower"].indexOf(field) !== -1) return auditPersonValue(value);
     if (field === "scope") return scopeLabel(value);
     if (field === "status") {
-      return value === "confirmed" ? "確定" : value === "unclassified" ? "未分類" : value === "refunded" ? "返金" : String(value);
+      return value === "confirmed" ? "確定" : value === "unclassified" ? UNSORTED_LABEL : value === "refunded" ? "返金" : String(value);
     }
     if (field === "mode") return value === "auto" ? "自動分類" : value === "confirm" ? "毎回確認" : String(value);
     if (typeof value === "boolean") return value ? "はい" : "いいえ";
@@ -718,7 +728,7 @@
 
     list.innerHTML = matches.map(function (rule) {
       var detail = rule.mode === "auto"
-        ? escapeHtml(rule.category_name || "未設定") + " ・ " + scopeLabel(rule.scope)
+        ? escapeHtml(rule.category_name || NO_CATEGORY_LABEL) + " ・ " + scopeLabel(rule.scope)
         : "毎回確認";
       return '<button type="button" class="merchant-suggestion" role="option" data-manual-merchant-rule="' +
         rule.id + '"><strong>' + escapeHtml(rule.merchant_name) +
@@ -1598,7 +1608,7 @@
 
     var cards = matches.map(function (tx, matchIndex) {
       var txMeta = shortDate(tx.date) + " ・ " +
-        (tx.category_name || "その他") + " ・ " + scopeLabel(tx.scope);
+        categoryLabel(tx) + " ・ " + scopeLabel(tx.scope);
       var memo = normalizeText(tx.memo);
 
       return '<div class="csv-match-detail">' +
@@ -1617,7 +1627,7 @@
 
   function csvReviewRow(row, index) {
     var meta = shortDate(row.date) + " ・ " +
-      (row.category_name || "未分類") + " ・ " +
+      (row.category_name || UNSORTED_LABEL) + " ・ " +
       (row.scope ? scopeLabel(row.scope) : "要確認");
 
     return '<div class="csv-review-row' +
@@ -1741,7 +1751,7 @@
   }
 
   function txRow(tx) {
-    var sub = shortDate(tx.date) + " ・ " + escapeHtml(tx.category_name || "その他") + " ・ " +
+    var sub = shortDate(tx.date) + " ・ " + escapeHtml(categoryLabel(tx)) + " ・ " +
       scopeLabel(tx.scope) + " ・ 支払：" + payerLabel(tx.payer);
     return '<button type="button" class="transaction-row transaction-edit-row" data-edit-tx="' + tx.id + '">' +
       '<div class="tx-icon">' + iconFor(tx) + '</div>' +
@@ -1806,14 +1816,16 @@
   }
 
   function ledgerTxRow(tx) {
-    var title = tx.merchant_name + "（" + (tx.category_name || "未設定") + "）　" + shortDate(tx.date);
+    // 店名が長いときは店名だけを省略し、日付は常に見えるようにする。
+    var title = tx.merchant_name + "（" + categoryLabel(tx) + "）";
     var splitLabel = splitMetaLabel(tx);
     var lateLabel = lateSettlementLabel(tx);
     var meta = (lateLabel ? lateLabel + " ｜ " : "") +
       (splitLabel ? splitLabel + " ｜ " : "") + payerLabel(tx.payer) + " ｜ " + sourceDisplay(tx);
     return '<button type="button" class="transaction-row transaction-edit-row ledger-transaction-row" data-edit-tx="' + tx.id + '">' +
       '<div class="tx-icon">' + escapeHtml(iconFor(tx)) + '</div>' +
-      '<div class="tx-main"><strong>' + escapeHtml(title) + '</strong><small>' +
+      '<div class="tx-main"><strong class="tx-title"><span class="tx-title-text">' + escapeHtml(title) +
+      '</span><span class="tx-title-date">' + escapeHtml(shortDate(tx.date)) + '</span></strong><small>' +
       escapeHtml(meta) + '</small></div>' +
       '<div class="tx-side"><div class="tx-amount">' + yen(tx.amount) + '</div>' +
       '<span class="tx-edit-label">編集 ›</span></div></button>';
@@ -1950,7 +1962,7 @@
   ];
 
   function normalizedCategory(tx) {
-    return tx.category_name || "その他";
+    return tx.category_name || NO_CATEGORY_LABEL;
   }
 
   // 使い道・分析の集計対象は共同の生活費だけ。
@@ -2304,7 +2316,7 @@
 
     return "\n\n【精算前の確認】" +
       "\nカード明細 " + cardLines.join(" / ") +
-      (unclassified ? "\n未分類 " + unclassified + "件（精算額に入っていません）" : "") +
+      (unclassified ? "\n" + UNSORTED_LABEL + " " + unclassified + "件（精算額に入っていません）" : "") +
       "\n精算後に追加したこの月の明細は、翌月の精算に入ります。" +
       "\nこの月の精算に入った明細の金額・日付などは変更できなくなります。";
   }
@@ -2609,7 +2621,7 @@
             return '<button type="button" class="merchant-row merchant-row-button" data-edit-merchant-rule="' + r.id + '">' +
               '<div><strong>' + escapeHtml(r.merchant_name) +
               '</strong><small>' + (r.mode === "confirm" ? "毎回確認" :
-              escapeHtml(r.category_name || "未設定") + " ・ " + scopeLabel(r.scope)) +
+              escapeHtml(r.category_name || NO_CATEGORY_LABEL) + " ・ " + scopeLabel(r.scope)) +
               '</small></div><b>›</b></button>';
           }).join("")
         : '<p class="muted">店舗ルールはまだありません。</p>';
@@ -2952,7 +2964,7 @@
         if (!category) return;
         var ok = window.confirm(
           "「" + category.name + "」を削除しますか？\n" +
-          "この費目を使っている明細や店舗ルールは「未設定」になります。"
+          "この費目を使っている明細や店舗ルールは「" + NO_CATEGORY_LABEL + "」になります。"
         );
         if (!ok) return;
 
@@ -3086,8 +3098,24 @@
     });
   });
 
+  // 保存ボタンの二度押しで、閉じた直後に同じ位置の「＋ 支出を追加」などが開くのを防ぐ。
+  // close イベントは閉じた後に遅れて届くため、ダイアログが開いている間のタップの時刻も記録する。
+  var DIALOG_REOPEN_GUARD_MS = 600;
+  var lastDialogActiveAt = 0;
+  document.querySelectorAll("dialog").forEach(function (dialog) {
+    dialog.addEventListener("close", function () {
+      lastDialogActiveAt = Date.now();
+    });
+  });
+  document.addEventListener("pointerdown", function () {
+    if (document.querySelector("dialog[open]")) lastDialogActiveAt = Date.now();
+  }, true);
+
   document.querySelectorAll("[data-open]").forEach(function (button) {
     button.addEventListener("click", function () {
+      // 保存中（ダイアログがまだ開いている）か、閉じた直後のタップは無視する。
+      if (document.querySelector("dialog[open]")) return;
+      if (Date.now() - lastDialogActiveAt < DIALOG_REOPEN_GUARD_MS) return;
       var dialog = document.getElementById(button.getAttribute("data-open"));
       if (dialog && dialog.id === "manualExpenseDialog") {
         var ruleMode = document.getElementById("manualExpenseRuleMode");
