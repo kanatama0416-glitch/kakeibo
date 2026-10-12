@@ -68,7 +68,10 @@
     currentMonth: defaultMonthKey(),
     analysisStartMonth: null,
     analysisEndMonth: null,
-    analysisCategory: null
+    analysisCategory: null,
+    ledgerCategory: null,
+    ledgerCategoryStart: null,
+    ledgerCategoryEnd: null
   };
 
   function yen(value) {
@@ -156,7 +159,7 @@
   // 仕分け前（共同・立替・対象外が決まっていない）の明細の呼び方。画面全体でこの言葉にそろえる。
   var UNSORTED_LABEL = "未仕分け";
   // 仕分け済みだが費目がない明細（費目を削除した場合など）の呼び方。
-  var NO_CATEGORY_LABEL = "費目なし";
+  var NO_CATEGORY_LABEL = window.KakeiboCategoryView.NO_CATEGORY_LABEL;
 
   function categoryLabel(tx) {
     if (isUnsortedTx(tx) && !tx.category_name) return UNSORTED_LABEL;
@@ -1934,11 +1937,15 @@
     button.classList.toggle("hidden", !batch);
   }
 
+  var LEDGER_VIEW_TITLES = { list:"明細", category:"費目別", history:"取込履歴" };
+
   function setLedgerView(view) {
-    state.ledgerView = view === "history" ? "history" : "list";
+    state.ledgerView = LEDGER_VIEW_TITLES[view] ? view : "list";
     var listView = document.getElementById("ledgerListView");
+    var categoryView = document.getElementById("ledgerCategoryView");
     var historyView = document.getElementById("importHistoryView");
     if (listView) listView.classList.toggle("hidden", state.ledgerView !== "list");
+    if (categoryView) categoryView.classList.toggle("hidden", state.ledgerView !== "category");
     if (historyView) historyView.classList.toggle("hidden", state.ledgerView !== "history");
     document.querySelectorAll("[data-ledger-view]").forEach(function (button) {
       var active = button.getAttribute("data-ledger-view") === state.ledgerView;
@@ -1948,7 +1955,87 @@
     var shell = document.getElementById("appShell");
     if (shell) shell.setAttribute("data-ledger-view", state.ledgerView);
     var title = document.getElementById("topbarScreenTitle");
-    if (title) title.textContent = state.ledgerView === "history" ? "取込履歴" : "明細";
+    if (title) title.textContent = LEDGER_VIEW_TITLES[state.ledgerView];
+  }
+
+  // 明細画面「費目別」：費目の選択肢。登録済みの費目の順に、期間内に明細があるのに一覧にない費目（費目なし等）を足す。
+  function ledgerCategoryOptions(totals) {
+    var names = (state.data && state.data.categories || []).map(function (category) {
+      return String(category.name || "");
+    }).filter(Boolean);
+    Object.keys(totals).forEach(function (name) {
+      if (names.indexOf(name) === -1) names.push(name);
+    });
+    return names;
+  }
+
+  function ledgerCategoryDefault(names, totals) {
+    var used = sortedCategoryEntries(totals).filter(function (entry) {
+      return names.indexOf(entry.name) !== -1;
+    });
+    return used.length ? used[0].name : (names[0] || "");
+  }
+
+  function renderLedgerCategoryView() {
+    var categorySelect = document.getElementById("ledgerCategorySelect");
+    var startSelect = document.getElementById("ledgerCategoryStart");
+    var endSelect = document.getElementById("ledgerCategoryEnd");
+    var summaryEl = document.getElementById("ledgerCategorySummary");
+    var listEl = document.getElementById("ledgerCategoryList");
+    var emptyEl = document.getElementById("ledgerCategoryEmpty");
+    var emptyMessage = document.getElementById("ledgerCategoryEmptyMessage");
+    if (!categorySelect || !startSelect || !endSelect || !summaryEl || !listEl || !emptyEl || !emptyMessage) return;
+
+    var range = clampMonthRange(state.ledgerCategoryStart, state.ledgerCategoryEnd);
+    state.ledgerCategoryStart = range.start;
+    state.ledgerCategoryEnd = range.end;
+    var monthOptions = analysisRangeOptions();
+    if (startSelect.innerHTML !== monthOptions) startSelect.innerHTML = monthOptions;
+    if (endSelect.innerHTML !== monthOptions) endSelect.innerHTML = monthOptions;
+    startSelect.value = range.start;
+    endSelect.value = range.end;
+
+    var categoryView = window.KakeiboCategoryView;
+    var transactions = state.data.transactions || [];
+    var totals = categoryView.totalsInRange(transactions, range.start, range.end);
+    var names = ledgerCategoryOptions(totals);
+    if (!state.ledgerCategory || names.indexOf(state.ledgerCategory) === -1) {
+      state.ledgerCategory = ledgerCategoryDefault(names, totals);
+    }
+    categorySelect.disabled = names.length === 0;
+    categorySelect.innerHTML = names.length
+      ? names.map(function (name) {
+        return '<option value="' + escapeHtml(name) + '">' + escapeHtml(categoryIcon(name) + " " + name) +
+          '（' + escapeHtml(yen(totals[name] || 0)) + '）</option>';
+      }).join("")
+      : '<option value="">費目がありません</option>';
+    categorySelect.value = state.ledgerCategory;
+
+    var periodLabel = range.start === range.end
+      ? fullMonthLabel(range.start)
+      : fullMonthLabel(range.start) + "〜" + fullMonthLabel(range.end);
+    var result = categoryView.summarize(transactions, {
+      category:state.ledgerCategory, startMonth:range.start, endMonth:range.end
+    });
+
+    summaryEl.innerHTML =
+      '<span class="ledger-category-summary-label">' + escapeHtml(categoryIcon(state.ledgerCategory) + " " +
+        (state.ledgerCategory || "費目なし")) + '</span>' +
+      '<strong id="ledgerCategoryTotal">' + escapeHtml(yen(result.total)) + '</strong>' +
+      '<small><span id="ledgerCategoryPeriod">' + escapeHtml(periodLabel) + '</span> ・ ' + result.count + '件</small>' +
+      '<p class="ledger-category-note">共同の生活費（仕分け済み）を利用日の月で集計</p>';
+
+    listEl.innerHTML = result.months.map(function (group) {
+      return '<section class="ledger-category-month">' +
+        '<div class="ledger-category-month-head"><h4>' + escapeHtml(fullMonthLabel(group.month)) + '</h4>' +
+        '<span>' + group.count + '件 ・ <strong>' + escapeHtml(yen(group.total)) + '</strong></span></div>' +
+        '<div class="transaction-list">' + group.transactions.map(ledgerTxRow).join("") + '</div>' +
+      '</section>';
+    }).join("");
+    emptyMessage.textContent = state.ledgerCategory
+      ? periodLabel + "の「" + state.ledgerCategory + "」の明細はありません。"
+      : "費目がまだありません。設定から費目を追加してください。";
+    emptyEl.classList.toggle("hidden", result.count > 0);
   }
 
   var CATEGORY_COLORS = [
@@ -1962,15 +2049,12 @@
   ];
 
   function normalizedCategory(tx) {
-    return tx.category_name || NO_CATEGORY_LABEL;
+    return window.KakeiboCategoryView.categoryName(tx);
   }
 
-  // 使い道・分析の集計対象は共同の生活費だけ。
-  // 対象外（個人の買い物）と個人間の立替は個人の支出なので含めない（README の運用ルール）。
+  // 使い道・分析・費目別の集計対象は共同の生活費だけ（判定は lib/category-view.js）。
   function confirmedSpending(transactions) {
-    return transactions.filter(function (t) {
-      return (t.status === "confirmed" || t.status === "refunded") && t.scope === "shared";
-    });
+    return transactions.filter(window.KakeiboCategoryView.isCategorySpending);
   }
 
   function categoryTotals(transactions) {
@@ -2011,24 +2095,24 @@
     return { start:start, end:end };
   }
 
-  function ensureAnalysisRange() {
+  // 期間（開始月〜終了月）を選べる範囲に収める。未設定なら直近の既定期間にする。
+  function clampMonthRange(start, end) {
     var minMonth = earliestAvailableMonth();
     var maxMonth = maxSelectableMonth();
     var fallback = defaultAnalysisRange();
-
-    if (!state.analysisStartMonth) state.analysisStartMonth = fallback.start;
-    if (!state.analysisEndMonth) state.analysisEndMonth = fallback.end;
-
-    state.analysisStartMonth = state.analysisStartMonth < minMonth
-      ? minMonth
-      : (state.analysisStartMonth > maxMonth ? maxMonth : state.analysisStartMonth);
-    state.analysisEndMonth = state.analysisEndMonth < minMonth
-      ? minMonth
-      : (state.analysisEndMonth > maxMonth ? maxMonth : state.analysisEndMonth);
-
-    if (state.analysisStartMonth > state.analysisEndMonth) {
-      state.analysisStartMonth = state.analysisEndMonth;
+    function clamp(month) {
+      return month < minMonth ? minMonth : (month > maxMonth ? maxMonth : month);
     }
+    var clampedStart = clamp(start || fallback.start);
+    var clampedEnd = clamp(end || fallback.end);
+    if (clampedStart > clampedEnd) clampedStart = clampedEnd;
+    return { start:clampedStart, end:clampedEnd };
+  }
+
+  function ensureAnalysisRange() {
+    var range = clampMonthRange(state.analysisStartMonth, state.analysisEndMonth);
+    state.analysisStartMonth = range.start;
+    state.analysisEndMonth = range.end;
   }
 
   function analysisRangeOptions() {
@@ -2545,6 +2629,7 @@
       actions.classList.remove("hidden");
     });
     renderLatestImportSummary();
+    renderLedgerCategoryView();
     renderImportHistory();
     setLedgerView(state.ledgerView);
 
@@ -3571,6 +3656,28 @@
     renderAnalysisChart();
   });
 
+  function refreshLedgerCategoryView() {
+    renderLedgerCategoryView();
+    bindDynamicButtons();
+  }
+
+  document.getElementById("ledgerCategorySelect").addEventListener("change", function (event) {
+    state.ledgerCategory = event.target.value;
+    refreshLedgerCategoryView();
+  });
+
+  document.getElementById("ledgerCategoryStart").addEventListener("change", function (event) {
+    state.ledgerCategoryStart = event.target.value;
+    if (state.ledgerCategoryStart > state.ledgerCategoryEnd) state.ledgerCategoryEnd = state.ledgerCategoryStart;
+    refreshLedgerCategoryView();
+  });
+
+  document.getElementById("ledgerCategoryEnd").addEventListener("change", function (event) {
+    state.ledgerCategoryEnd = event.target.value;
+    if (state.ledgerCategoryEnd < state.ledgerCategoryStart) state.ledgerCategoryStart = state.ledgerCategoryEnd;
+    refreshLedgerCategoryView();
+  });
+
   document.getElementById("payCurrentSettlementButton").addEventListener("click", async function () {
     var sourceMonth = state.currentMonth;
     if (sourceMonth < OPERATION_START_MONTH || state.currentMonth > actualMonthKey()) return;
@@ -4075,6 +4182,9 @@
     state.analysisStartMonth = null;
     state.analysisEndMonth = null;
     state.analysisCategory = null;
+    state.ledgerCategory = null;
+    state.ledgerCategoryStart = null;
+    state.ledgerCategoryEnd = null;
   }
 
   window.KakeiboApp = {

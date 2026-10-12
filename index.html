@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=20260927-1508">
   <link rel="icon" type="image/png" href="./apple-touch-icon.png?v=20260927-1508">
   <link rel="manifest" href="./manifest.webmanifest?v=20260927-1508">
-  <link rel="stylesheet" href="./styles.css?v=20261008-LABEL1">
+  <link rel="stylesheet" href="./styles.css?v=20261012-CATVIEW1">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -153,6 +153,7 @@
       <section class="screen" data-screen="transactions">
         <div class="ledger-tabs" role="tablist" aria-label="明細表示">
           <button type="button" class="ledger-tab active" data-ledger-view="list" role="tab" aria-selected="true">明細一覧</button>
+          <button type="button" class="ledger-tab" data-ledger-view="category" role="tab" aria-selected="false">費目別</button>
           <button type="button" class="ledger-tab" data-ledger-view="history" role="tab" aria-selected="false">取込履歴</button>
         </div>
 
@@ -175,6 +176,35 @@
           <div id="allTransactions" class="transaction-list"></div>
           <div id="ledgerEmpty" class="ledger-empty-state hidden">
             <p id="ledgerEmptyMessage"></p>
+          </div>
+        </div>
+
+        <div id="ledgerCategoryView" class="hidden">
+          <div class="analysis-range-control ledger-category-control" aria-label="費目と期間">
+            <label class="ledger-category-field">
+              <span>費目</span>
+              <select id="ledgerCategorySelect" aria-label="表示する費目">
+                <option value="">読み込み中…</option>
+              </select>
+            </label>
+            <label>
+              <span>開始月</span>
+              <select id="ledgerCategoryStart" aria-label="費目別の開始月">
+                <option value="">読み込み中…</option>
+              </select>
+            </label>
+            <span class="analysis-range-separator">〜</span>
+            <label>
+              <span>終了月</span>
+              <select id="ledgerCategoryEnd" aria-label="費目別の終了月">
+                <option value="">読み込み中…</option>
+              </select>
+            </label>
+          </div>
+          <article id="ledgerCategorySummary" class="ledger-category-summary" aria-live="polite"></article>
+          <div id="ledgerCategoryList" class="ledger-category-list"></div>
+          <div id="ledgerCategoryEmpty" class="ledger-empty-state hidden">
+            <p id="ledgerCategoryEmptyMessage"></p>
           </div>
         </div>
 
@@ -586,6 +616,6 @@
   <script src="./config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="./boot.js?v=20261008-LABEL1"></script>
+  <script src="./boot.js?v=20261012-CATVIEW1"></script>
 </body>
 </html>
