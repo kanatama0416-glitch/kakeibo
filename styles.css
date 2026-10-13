@@ -680,3 +680,11 @@ html,body,.app-shell{max-width:100%;overflow-x:hidden}
 .ledger-category-month-head h4{margin:0;font-size:13px;font-weight:900}
 .ledger-category-month-head span{color:var(--muted);font-size:12px;font-weight:800;white-space:nowrap}
 .ledger-category-month-head strong{color:var(--text)}
+/* オフライン対応 */
+.offline-banner{margin:0 16px 12px;padding:10px 12px;border-radius:14px;background:#eef4f8;border:1px solid #cfdde8;color:#2e4a5e}
+.offline-banner[data-tone="offline"]{background:#fff6e0;border-color:#f0d58a;color:#6a4b00}
+.offline-banner[data-tone="error"]{background:#fdecec;border-color:#f1b9b9;color:#8a2323}
+.offline-banner p{margin:0;font-size:12px;font-weight:800;line-height:1.6}
+.app-shell.is-offline [data-online-only],.app-shell.is-offline [data-edit-tx] .tx-edit-label,.app-shell.is-offline [data-edit-merchant-rule]{opacity:.45}
+.transaction-row.is-pending{border-style:dashed;background:#fffdf5}
+.transaction-row.is-pending .tx-edit-label{color:#8a6a00}

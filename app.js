@@ -71,7 +71,13 @@
     analysisCategory: null,
     ledgerCategory: null,
     ledgerCategoryStart: null,
-    ledgerCategoryEnd: null
+    ledgerCategoryEnd: null,
+    // オフライン対応：serverData は最後に読み込んだサーバーのデータ。state.data はそれに送信待ちの支出を足した表示用。
+    serverData: null,
+    offlineMode: false,
+    snapshotSavedAt: null,
+    syncing: false,
+    syncNeedsLogin: false
   };
 
   function yen(value) {
@@ -1753,14 +1759,31 @@
     if (input) input.disabled = !value;
   }
 
+  // 送信待ちの支出は編集ではなく「取り消し」を開く（まだサーバーにないため）。
+  function txRowTarget(tx) {
+    return tx.pending
+      ? 'data-pending-tx="' + escapeHtml(tx.client_request_id) + '"'
+      : 'data-edit-tx="' + Number(tx.id) + '"';
+  }
+
+  function pendingLabel(tx) {
+    if (!tx.pending) return "";
+    return tx.pending_error ? "送信エラー" : "未送信";
+  }
+
+  function txSideLabel(tx) {
+    return tx.pending ? "取消 ›" : "編集 ›";
+  }
+
   function txRow(tx) {
-    var sub = shortDate(tx.date) + " ・ " + escapeHtml(categoryLabel(tx)) + " ・ " +
+    var pending = pendingLabel(tx);
+    var sub = (pending ? escapeHtml(pending) + " ・ " : "") + shortDate(tx.date) + " ・ " + escapeHtml(categoryLabel(tx)) + " ・ " +
       scopeLabel(tx.scope) + " ・ 支払：" + payerLabel(tx.payer);
-    return '<button type="button" class="transaction-row transaction-edit-row" data-edit-tx="' + tx.id + '">' +
+    return '<button type="button" class="transaction-row transaction-edit-row' + (tx.pending ? ' is-pending' : '') + '" ' + txRowTarget(tx) + '>' +
       '<div class="tx-icon">' + iconFor(tx) + '</div>' +
       '<div class="tx-main"><strong>' + escapeHtml(tx.merchant_name) + '</strong><small>' + sub + '</small></div>' +
       '<div class="tx-side"><div class="tx-amount">' + yen(tx.amount) + '</div>' +
-      '<span class="tx-edit-label">編集 ›</span></div></button>';
+      '<span class="tx-edit-label">' + txSideLabel(tx) + '</span></div></button>';
   }
 
   function cardForId(id) {
@@ -1823,15 +1846,17 @@
     var title = tx.merchant_name + "（" + categoryLabel(tx) + "）";
     var splitLabel = splitMetaLabel(tx);
     var lateLabel = lateSettlementLabel(tx);
-    var meta = (lateLabel ? lateLabel + " ｜ " : "") +
+    var pending = pendingLabel(tx);
+    var meta = (pending ? pending + " ｜ " : "") + (lateLabel ? lateLabel + " ｜ " : "") +
       (splitLabel ? splitLabel + " ｜ " : "") + payerLabel(tx.payer) + " ｜ " + sourceDisplay(tx);
-    return '<button type="button" class="transaction-row transaction-edit-row ledger-transaction-row" data-edit-tx="' + tx.id + '">' +
+    return '<button type="button" class="transaction-row transaction-edit-row ledger-transaction-row' +
+      (tx.pending ? ' is-pending' : '') + '" ' + txRowTarget(tx) + '>' +
       '<div class="tx-icon">' + escapeHtml(iconFor(tx)) + '</div>' +
       '<div class="tx-main"><strong class="tx-title"><span class="tx-title-text">' + escapeHtml(title) +
       '</span><span class="tx-title-date">' + escapeHtml(shortDate(tx.date)) + '</span></strong><small>' +
       escapeHtml(meta) + '</small></div>' +
       '<div class="tx-side"><div class="tx-amount">' + yen(tx.amount) + '</div>' +
-      '<span class="tx-edit-label">編集 ›</span></div></button>';
+      '<span class="tx-edit-label">' + txSideLabel(tx) + '</span></div></button>';
   }
 
   function latestImportBatch() {
@@ -2463,6 +2488,173 @@
     return window.KakeiboSettlement.openSettlementMonth(monthKeyFromDate(date), state.data.settlements);
   }
 
+  // ---------- オフライン対応（端末保存・送信待ち・自動送信） ----------
+  // 端末の保存領域。本番とテスト環境で保存場所を分ける。使えない端末では null（保存せずに動く）。
+  var offlineStore = window.KakeiboOffline.createStore(safeLocalStorage(), window.KAKEIBO_TEST_MODE ? "test" : "prod");
+
+  function safeLocalStorage() {
+    try {
+      return window.localStorage;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function isOffline() {
+    return state.offlineMode || navigator.onLine === false;
+  }
+
+  // サーバーのデータに、端末に残っている送信待ちの支出を足して表示用のデータを作り直す。
+  function rebuildData() {
+    if (!state.serverData) return;
+    var settlements = state.serverData.settlements;
+    state.data = window.KakeiboOffline.mergeData(state.serverData, offlineStore.loadQueue(), function (date) {
+      return window.KakeiboSettlement.openSettlementMonth(monthKeyFromDate(date), settlements);
+    });
+  }
+
+  // サーバーから読み直し、端末にも保存する（次にオフラインで開いたときに表示するため）。
+  async function reloadData() {
+    var data = await window.kakeiboDb.getInitialData();
+    var savedAt = new Date().toISOString();
+    state.serverData = data;
+    state.offlineMode = false;
+    state.snapshotSavedAt = savedAt;
+    offlineStore.saveSnapshot(data, savedAt);
+    rebuildData();
+  }
+
+  function useOfflineSnapshot() {
+    var snapshot = offlineStore.loadSnapshot();
+    if (!snapshot) return false;
+    state.serverData = snapshot.data;
+    state.snapshotSavedAt = snapshot.saved_at;
+    state.offlineMode = true;
+    rebuildData();
+    return true;
+  }
+
+  // 送信待ちの支出を古い順に送る。通信できなければ途中で止め、次の機会（オンライン復帰など）に続きから送る。
+  // 内容が DB に拒否された支出は「送信エラー」として残し、ほかの支出の送信は続ける。
+  async function syncPending() {
+    var result = { sent:[], failed:[] };
+    if (state.syncing) return result;
+    if (navigator.onLine === false) {
+      state.offlineMode = true;
+      if (state.started) render();
+      return result;
+    }
+    var queue = offlineStore.loadQueue().filter(function (entry) { return !entry.last_error; });
+    state.syncing = true;
+    if (queue.length && state.started) renderOfflineState();
+    try {
+      if (queue.length) {
+        var session = await window.kakeiboDb.getSession();
+        state.syncNeedsLogin = !session;
+        if (!session) return result;
+      }
+      for (var i = 0; i < queue.length; i += 1) {
+        var entry = queue[i];
+        try {
+          await window.kakeiboDb.addManualTransaction(entry.tx, entry.remember, entry.id);
+          offlineStore.remove(entry.id);
+          result.sent.push(entry.id);
+        } catch (error) {
+          if (window.KakeiboOffline.isNetworkError(error, navigator.onLine)) throw error;
+          console.error(error);
+          offlineStore.markError(entry.id, (error && error.message) || "送信できませんでした");
+          result.failed.push(entry.id);
+        }
+      }
+      if (state.offlineMode || result.sent.length || result.failed.length) await reloadData();
+    } catch (error) {
+      if (!window.KakeiboOffline.isNetworkError(error, navigator.onLine)) throw error;
+      state.offlineMode = true;
+    } finally {
+      state.syncing = false;
+      rebuildData();
+      if (state.started) render();
+    }
+    return result;
+  }
+
+  function runSync() {
+    syncPending().catch(function (error) {
+      console.error(error);
+    });
+  }
+
+  // 送信待ちの支出を取り消す（まだサーバーにないので、端末から消すだけ）。
+  function cancelPendingTransaction(id) {
+    var entry = offlineStore.loadQueue().find(function (x) { return x.id === id; });
+    if (!entry) return;
+    var message = "未送信の支出「" + entry.tx.merchant_name + "」" + yen(entry.tx.amount) + " を取り消しますか？" +
+      (entry.last_error ? "\n送信できなかった理由：" + entry.last_error : "") +
+      "\n取り消すと、この端末から消えます。";
+    if (!window.confirm(message)) return;
+    offlineStore.remove(id);
+    rebuildData();
+    render();
+  }
+
+  function snapshotTimeLabel() {
+    if (!state.snapshotSavedAt) return "";
+    var date = new Date(state.snapshotSavedAt);
+    if (!Number.isFinite(date.getTime())) return "";
+    return date.toLocaleString("ja-JP", {
+      month:"numeric", day:"numeric", hour:"2-digit", minute:"2-digit", timeZone:"Asia/Tokyo"
+    });
+  }
+
+  // オフライン中・送信待ちの状態を画面上部に出す。オフライン中は通信が必要な操作を押せない見た目にする。
+  function renderOfflineState() {
+    var shell = document.getElementById("appShell");
+    var banner = document.getElementById("offlineBanner");
+    var text = document.getElementById("offlineBannerText");
+    if (shell) shell.classList.toggle("is-offline", isOffline());
+    if (!banner || !text) return;
+
+    var queue = offlineStore.loadQueue();
+    var errors = queue.filter(function (entry) { return !!entry.last_error; }).length;
+    var waiting = queue.length - errors;
+    var message = "";
+    var tone = "info";
+    if (isOffline()) {
+      var time = snapshotTimeLabel();
+      message = "オフライン中です。" + (time ? time + "時点の" : "最後に読み込んだ") + "データを表示しています。" +
+        "支出の追加はでき、通信が戻ると自動で送信します。";
+      if (waiting) message += "（未送信 " + waiting + "件）";
+      tone = "offline";
+    } else if (state.syncing && waiting) {
+      message = "未送信の支出 " + waiting + "件を送信しています…";
+    } else if (state.syncNeedsLogin && waiting) {
+      message = "ログインし直すと、未送信の支出 " + waiting + "件を送信します。";
+      tone = "offline";
+    } else if (waiting) {
+      message = "未送信の支出が " + waiting + "件あります。";
+    }
+    if (errors) {
+      message += (message ? " " : "") + "送信できなかった支出が " + errors + "件あります（明細一覧の「送信エラー」）。";
+      tone = "error";
+    }
+    text.textContent = message;
+    banner.setAttribute("data-tone", tone);
+    banner.classList.toggle("hidden", !message);
+  }
+
+  // 通信が必要な操作（編集・削除・仕分け・精算・取込・設定など）は、オフライン中は押せないようにする。
+  // 画面側の制限は案内のためで、データの保護は DB 側（RLS・精算ロック）が担う。
+  var ONLINE_ONLY_SELECTOR = "[data-online-only], [data-edit-tx], [data-classify], [data-edit-initial-expense], [data-edit-merchant-rule]";
+
+  function blockOfflineAction(event) {
+    if (!isOffline()) return;
+    var target = event.target && event.target.closest ? event.target.closest(ONLINE_ONLY_SELECTOR) : null;
+    if (!target) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    alert("オフライン中はこの操作はできません。通信できる場所でもう一度お試しください。\n（支出の追加はオフラインでもできます）");
+  }
+
   // 精算済みの月の取込行に、どの月の精算に入るかを添える（運用開始前の月は対象外）。
   function noteLateSettlement(row) {
     if (row.duplicate) return row;
@@ -2556,6 +2748,7 @@
 
   function render() {
     var summary = calculateSummary();
+    renderOfflineState();
 
     var selectedMonthLabel = monthLabel(state.currentMonth);
     renderImportReminder();
@@ -2940,6 +3133,12 @@
       };
     });
 
+    document.querySelectorAll("[data-pending-tx]").forEach(function (button) {
+      button.onclick = function () {
+        cancelPendingTransaction(button.getAttribute("data-pending-tx"));
+      };
+    });
+
     document.querySelectorAll("[data-edit-tx]").forEach(function (button) {
       button.onclick = function () {
         var parentDialog = button.closest("dialog");
@@ -2982,7 +3181,7 @@
         button.disabled = true;
         try {
           await window.kakeiboDb.updateCard(id, { name:name, last4:last4 });
-          state.data = await window.kakeiboDb.getInitialData();
+          await reloadData();
           render();
         } catch (error) {
           console.error(error);
@@ -3004,7 +3203,7 @@
         button.disabled = true;
         try {
           await window.kakeiboDb.deleteCard(id);
-          state.data = await window.kakeiboDb.getInitialData();
+          await reloadData();
           render();
         } catch (error) {
           console.error(error);
@@ -3027,7 +3226,7 @@
         button.disabled = true;
         try {
           await window.kakeiboDb.updateCategory(id, value, icon);
-          state.data = await window.kakeiboDb.getInitialData();
+          await reloadData();
           render();
         } catch (error) {
           console.error(error);
@@ -3056,7 +3255,7 @@
         button.disabled = true;
         try {
           await window.kakeiboDb.deleteCategory(id);
-          state.data = await window.kakeiboDb.getInitialData();
+          await reloadData();
           render();
         } catch (error) {
           console.error(error);
@@ -3300,7 +3499,7 @@
     if (button) button.disabled = true;
     try {
       await window.kakeiboDb.saveAppSettings(percent);
-      state.data = await window.kakeiboDb.getInitialData();
+      await reloadData();
       document.getElementById("shareSettingsDialog").close();
       render();
     } catch (error) {
@@ -3327,7 +3526,7 @@
     if (button) button.disabled = true;
     try {
       await window.kakeiboDb.addCategory(name, icon);
-      state.data = await window.kakeiboDb.getInitialData();
+      await reloadData();
       input.value = "";
       if (iconInput) iconInput.value = "";
       render();
@@ -3359,7 +3558,7 @@
     if (button) button.disabled = true;
     try {
       await window.kakeiboDb.saveMerchantRule(rule);
-      state.data = await window.kakeiboDb.getInitialData();
+      await reloadData();
       document.getElementById("merchantRuleDialog").close();
       render();
     } catch (error) {
@@ -3380,7 +3579,7 @@
 
     try {
       await window.kakeiboDb.deleteMerchantRule(id);
-      state.data = await window.kakeiboDb.getInitialData();
+      await reloadData();
       document.getElementById("merchantRuleDialog").close();
       render();
     } catch (error) {
@@ -3589,7 +3788,7 @@
         ? importedMonths[importedMonths.length - 1]
         : targetMonth;
 
-      state.data = await window.kakeiboDb.getInitialData();
+      await reloadData();
       state.currentMonth = latestImportedMonth;
       state.filter = "all";
       state.filterTouched = true;
@@ -3682,6 +3881,11 @@
     var sourceMonth = state.currentMonth;
     if (sourceMonth < OPERATION_START_MONTH || state.currentMonth > actualMonthKey()) return;
     if (paidSettlementRecord(sourceMonth)) return;
+    // 送信待ち・送信エラーの支出は画面の精算額には入っているが DB にはまだないので、先に片付けてもらう。
+    if (pendingCount() > 0) {
+      alert("未送信の支出があります。送信が終わるか、明細一覧で取り消してから精算してください。");
+      return;
+    }
 
     var summary = calculateSummary(sourceMonth);
     var amount = Number(summary.finalSettlement || 0);
@@ -3712,7 +3916,7 @@
         summary.plan ? summary.plan.id : null,
         repaymentAmount
       );
-      state.data = await window.kakeiboDb.getInitialData();
+      await reloadData();
       render();
     } catch (e) {
       console.error(e);
@@ -3722,7 +3926,7 @@
       if (payMessage.indexOf("SETTLEMENT_AMOUNT_MISMATCH") !== -1) {
         alert("画面の精算額が最新ではありません。相手が明細を変更した可能性があります。画面を更新してから、もう一度お試しください。");
         try {
-          state.data = await window.kakeiboDb.getInitialData();
+          await reloadData();
           render();
         } catch (reloadError) {
           console.error(reloadError);
@@ -3746,7 +3950,7 @@
 
     try {
       await window.kakeiboDb.undoSettlementPaid(sourceMonth);
-      state.data = await window.kakeiboDb.getInitialData();
+      await reloadData();
       render();
     } catch (e) {
       console.error(e);
@@ -3782,7 +3986,7 @@
 
     try {
       await window.kakeiboDb.deleteCarryover("living", state.currentMonth);
-      state.data = await window.kakeiboDb.getInitialData();
+      await reloadData();
       render();
     } catch (e) {
       console.error(e);
@@ -3827,7 +4031,7 @@
 
       try {
         await window.kakeiboDb.saveCarryover(category, state.currentMonth, amount);
-        state.data = await window.kakeiboDb.getInitialData();
+        await reloadData();
         render();
       } catch (e) {
         console.error(e);
@@ -3872,7 +4076,7 @@
       await window.kakeiboDb.deleteTransaction(id);
       document.getElementById("classifyDialog").close();
       state.currentClassifyId = null;
-      state.data = await window.kakeiboDb.getInitialData();
+      await reloadData();
       render();
     } catch (e) {
       console.error(e);
@@ -3931,7 +4135,7 @@
 
     try {
       await window.kakeiboDb.updateTransaction(id, tx, remember);
-      state.data = await window.kakeiboDb.getInitialData();
+      await reloadData();
       document.getElementById("classifyDialog").close();
       render();
     } catch (e) {
@@ -3981,6 +4185,24 @@
   // 保存中の二重送信（素早い2回タップ）で同じ支出が2件登録されるのを防ぐ。
   var manualExpenseSaving = false;
 
+  // オフライン中に通信が必要な操作を止める（各ボタンの処理より先に判定するため capture で受ける）。
+  document.addEventListener("click", blockOfflineAction, true);
+
+  window.addEventListener("offline", function () {
+    state.offlineMode = true;
+    if (state.started) render();
+  });
+
+  // 通信が戻ったら、送信待ちを送って最新のデータを読み直す。
+  window.addEventListener("online", function () {
+    if (state.started) runSync();
+  });
+
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState !== "visible" || !state.started || navigator.onLine === false) return;
+    if (state.offlineMode || pendingCount() > 0) runSync();
+  });
+
   document.getElementById("manualExpenseForm").addEventListener("submit", async function (event) {
     event.preventDefault();
     if (manualExpenseSaving) return;
@@ -4020,18 +4242,31 @@
     manualExpenseSaving = true;
     if (saveButton) saveButton.disabled = true;
     try {
-      await window.kakeiboDb.addManualTransaction(tx, remember);
-      state.data = await window.kakeiboDb.getInitialData();
+      // まず端末に「送信待ち」として残し、それから送る。通信が切れていても入力は消えず、
+      // 戻ったときに同じ送信IDで送り直す（DB 側で二重登録にならない）。
+      var entry = window.KakeiboOffline.createEntry(tx, {
+        id:window.KakeiboOffline.newRequestId(),
+        remember:remember
+      });
+      offlineStore.enqueue(entry);
       document.getElementById("manualExpenseForm").reset();
       splitEditors.manual.setState({ payer:"me", forWhom:"both", mode:"rate", meAmount:null });
       manualMerchantSelectedValue = "";
       hideManualMerchantSuggestions();
       setDefaultEntryDates();
       document.getElementById("manualExpenseDialog").close();
+      rebuildData();
       render();
+      var result = await syncPending().catch(function (error) {
+        console.error(error);
+        return { sent:[], failed:[] };
+      });
+      if (result.failed.indexOf(entry.id) !== -1) {
+        alert("支出を送信できませんでした。明細一覧の「送信エラー」から内容を確認してください。");
+      }
     } catch (e) {
       console.error(e);
-      alert("支出を保存できませんでした。");
+      alert("支出を保存できませんでした。" + (e && e.message ? "\n" + e.message : ""));
     } finally {
       manualExpenseSaving = false;
       if (saveButton) saveButton.disabled = false;
@@ -4056,7 +4291,7 @@
       if (id) await window.kakeiboDb.updateInitialExpense(id, expense);
       else await window.kakeiboDb.addInitialExpense(expense);
 
-      state.data = await window.kakeiboDb.getInitialData();
+      await reloadData();
       document.getElementById("initialExpenseForm").reset();
       document.getElementById("initialExpenseId").value = "";
       document.getElementById("deleteInitialExpenseButton").classList.add("hidden");
@@ -4091,7 +4326,7 @@
       document.getElementById("initialExpenseDialog").close();
       document.getElementById("initialExpenseForm").reset();
       document.getElementById("initialExpenseId").value = "";
-      state.data = await window.kakeiboDb.getInitialData();
+      await reloadData();
       render();
     } catch (e) {
       console.error(e);
@@ -4139,7 +4374,7 @@
         state.currentMonth,
         amount
       );
-      state.data = await window.kakeiboDb.getInitialData();
+      await reloadData();
       document.getElementById("repaymentDialog").close();
       render();
     } catch (e) {
@@ -4155,16 +4390,49 @@
     state.started = true;
 
     try {
-      state.data = await window.kakeiboDb.getInitialData();
+      try {
+        await reloadData();
+      } catch (error) {
+        // 通信できないときは、最後に読み込んだデータで起動する（閲覧と支出の追加だけできる）。
+        if (!window.KakeiboOffline.isNetworkError(error, navigator.onLine) || !useOfflineSnapshot()) throw error;
+      }
+      // 前回「送信エラー」になった支出も、起動のたびに一度送り直す（一時的な障害だった場合に届くように）。
+      offlineStore.clearErrors();
+      rebuildData();
       initMonthSelect();
       syncAnalysisRangeControls();
       setDefaultEntryDates();
       render();
+      if (!state.offlineMode) runSync();
     } catch (error) {
       state.started = false;
       console.error(error);
       throw error;
     }
+  }
+
+  // ログイン状態をサーバーに確かめられないとき（オフライン起動）に、端末のデータだけで始める。
+  async function startOffline() {
+    if (state.started) return;
+    if (!useOfflineSnapshot()) throw new Error("端末に保存されたデータがありません。");
+    state.started = true;
+    initMonthSelect();
+    syncAnalysisRangeControls();
+    setDefaultEntryDates();
+    render();
+  }
+
+  function hasOfflineSnapshot() {
+    return !!offlineStore.loadSnapshot();
+  }
+
+  function pendingCount() {
+    return offlineStore.loadQueue().length;
+  }
+
+  // ログアウト時に端末の家計データと送信待ちを消す。
+  function clearOfflineData() {
+    offlineStore.clearAll();
   }
 
   function reset() {
@@ -4185,10 +4453,19 @@
     state.ledgerCategory = null;
     state.ledgerCategoryStart = null;
     state.ledgerCategoryEnd = null;
+    state.serverData = null;
+    state.offlineMode = false;
+    state.snapshotSavedAt = null;
+    state.syncing = false;
+    state.syncNeedsLogin = false;
   }
 
   window.KakeiboApp = {
     start: start,
-    reset: reset
+    startOffline: startOffline,
+    reset: reset,
+    hasOfflineSnapshot: hasOfflineSnapshot,
+    pendingCount: pendingCount,
+    clearOfflineData: clearOfflineData
   };
 })();

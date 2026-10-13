@@ -336,7 +336,11 @@
     if (result.error) throw result.error;
   }
 
-  async function addManualTransaction(tx, rememberMerchant) {
+  var MANUAL_TX_COLUMNS = "id,transaction_date,merchant_name,amount,scope,payer,me_share_amount,status,source,memo,client_request_id";
+
+  // 支出の手入力。clientRequestId（端末で発行した送信ID）を付けると、同じ送信IDでの再送は
+  // 新しく登録せずに登録済みの1件を返す（オフライン追加の再送・応答が届かなかった場合の二重登録防止）。
+  async function addManualTransaction(tx, rememberMerchant, clientRequestId) {
     var categoryResult = await client.from("categories")
       .select("id").eq("name", tx.category_name).limit(1);
     if (categoryResult.error) throw categoryResult.error;
@@ -358,9 +362,16 @@
       status:amount < 0 ? "refunded" : "confirmed",
       source:"manual",
       memo:tx.memo || null,
-      is_demo:false
-    }).select("id,transaction_date,merchant_name,amount,scope,payer,me_share_amount,status,source,memo").single();
+      is_demo:false,
+      client_request_id:clientRequestId || null
+    }).select(MANUAL_TX_COLUMNS).single();
 
+    if (result.error && clientRequestId && isDuplicateRequest(result.error)) {
+      result = await client.from("transactions")
+        .select(MANUAL_TX_COLUMNS)
+        .eq("client_request_id", clientRequestId)
+        .single();
+    }
     if (result.error) throw result.error;
 
     if (rememberMerchant) {
@@ -372,6 +383,11 @@
     }
 
     return result.data;
+  }
+
+  function isDuplicateRequest(error) {
+    return error.code === "23505" &&
+      /client_request_id/.test(String(error.message || "") + " " + String(error.details || ""));
   }
 
   async function findOrCreateCard(card) {

@@ -126,8 +126,10 @@
     if(i>=0 && isSettled(settlementMonthOfRow(data.transactions[i]))) throw lockedError();
     if(i>=0){var before=data.transactions[i];data.transactions.splice(i,1);log("DELETE","transactions",id,clone(before),null);}
   }
-  async function addManualTransaction(tx) {
-    var row={id:++ids.transaction,date:tx.date,settlement_month:settlementMonthFor(tx.date),merchant_name:tx.merchant_name,amount:Number(tx.amount),category_name:tx.category_name,scope:tx.scope,payer:tx.payer,me_share_amount:tx.scope==="shared"&&tx.me_share_amount!=null?Number(tx.me_share_amount):null,status:Number(tx.amount)<0?"refunded":"confirmed",source:"manual",memo:tx.memo||""};
+  // 本番と同じく、同じ送信ID（clientRequestId）の再送は登録済みの1件を返す。
+  async function addManualTransaction(tx, rememberMerchant, clientRequestId) {
+    if(clientRequestId){var sent=data.transactions.find(function(x){return x.client_request_id===clientRequestId;}); if(sent) return clone(sent);}
+    var row={client_request_id:clientRequestId||null,id:++ids.transaction,date:tx.date,settlement_month:settlementMonthFor(tx.date),merchant_name:tx.merchant_name,amount:Number(tx.amount),category_name:tx.category_name,scope:tx.scope,payer:tx.payer,me_share_amount:tx.scope==="shared"&&tx.me_share_amount!=null?Number(tx.me_share_amount):null,status:Number(tx.amount)<0?"refunded":"confirmed",source:"manual",memo:tx.memo||""};
     data.transactions.push(row); log("INSERT","transactions",row.id,null,clone(row)); return clone(row);
   }
   async function importCsvTransactions(rows, batchMeta) {
@@ -249,7 +251,13 @@
     data.repayments=data.repayments.filter(function(x){return String(x.repayment_month).slice(0,7)!==settlementMonth;});
   }
 
-  window.kakeiboDb = {
+  // テスト環境でも通信が切れた状態を再現する（端末をオフラインにすると、本番の通信失敗と同じ形の失敗を返す）。
+  function networkFailure() {
+    return { message:"TypeError: Failed to fetch", details:"テスト環境：オフライン", hint:"", code:"" };
+  }
+
+  var api = {
+    getSession:async function(){ return { user:{ id:"test-me", email:"me@example.com" } }; },
     getInitialData:getInitialData,
     getAuditLogs:getAuditLogs,
     updateTransaction:updateTransaction,
@@ -273,4 +281,12 @@
     markSettlementPaid:markSettlementPaid,
     undoSettlementPaid:undoSettlementPaid
   };
+
+  window.kakeiboDb = {};
+  Object.keys(api).forEach(function (name) {
+    window.kakeiboDb[name] = async function () {
+      if (navigator.onLine === false) throw networkFailure();
+      return api[name].apply(null, arguments);
+    };
+  });
 })();

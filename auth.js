@@ -82,7 +82,17 @@
 
     setMessage("");
 
-    var allowed = await window.kakeiboDb.checkAccess();
+    var allowed;
+    try {
+      allowed = await window.kakeiboDb.checkAccess();
+    } catch (error) {
+      // 通信できないときは、この端末に保存した家計データがあればオフラインで開く。
+      if (canStartOffline(error)) {
+        await showAppOffline();
+        return;
+      }
+      throw error;
+    }
     if (!allowed) {
       await window.kakeiboDb.signOut();
       showLogin("このメールアドレスには、この家計簿へのアクセス権がありません。");
@@ -224,8 +234,14 @@
   });
 
   logoutButton.addEventListener("click", async function () {
+    var pending = window.KakeiboApp.pendingCount();
+    if (pending > 0 && !window.confirm(
+      "まだ送信していない支出が " + pending + "件あります。\nログアウトすると、この端末から消えます。ログアウトしますか？"
+    )) return;
     try {
       await window.kakeiboDb.signOut();
+      // 端末に保存した家計データと送信待ちを消す（同じ端末で別の人が開いても見えないように）。
+      window.KakeiboApp.clearOfflineData();
       window.KakeiboApp.reset();
       appStarted = false;
       showLogin("");
@@ -234,6 +250,22 @@
     }
   });
 
+  // オフライン起動できるか：通信できない失敗で、この端末に前回の家計データが残っているとき。
+  // （ログアウトすると端末のデータは消えるので、ログインしたことのある端末でだけ開ける）
+  function canStartOffline(error) {
+    return window.KakeiboOffline.isNetworkError(error, navigator.onLine) &&
+      window.KakeiboApp.hasOfflineSnapshot();
+  }
+
+  async function showAppOffline() {
+    authGate.classList.add("hidden");
+    appShell.classList.remove("hidden");
+    if (!appStarted) {
+      appStarted = true;
+      await window.KakeiboApp.startOffline();
+    }
+  }
+
   async function init() {
     try {
       if (recoveryMode) {
@@ -241,16 +273,31 @@
         return;
       }
 
-      var session = await window.kakeiboDb.getSession();
+      var session;
+      try {
+        session = await window.kakeiboDb.getSession();
+      } catch (error) {
+        if (canStartOffline(error)) {
+          await showAppOffline();
+          return;
+        }
+        throw error;
+      }
 
       if (session) {
         await showApp();
+      } else if (navigator.onLine === false && window.KakeiboApp.hasOfflineSnapshot()) {
+        // 期限切れのログイン情報をオフラインで更新できなかったとき。通信が戻れば自動で更新される。
+        await showAppOffline();
       } else {
         showLogin("");
       }
     } catch (error) {
       console.error(error);
-      showLogin("ログイン状態を確認できませんでした。");
+      appStarted = false;
+      showLogin(navigator.onLine === false
+        ? "オフラインのため開けませんでした。一度通信できる場所で開くと、次からはオフラインでも使えます。"
+        : "ログイン状態を確認できませんでした。");
     }
   }
 

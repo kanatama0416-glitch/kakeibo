@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=20260927-1508">
   <link rel="icon" type="image/png" href="./apple-touch-icon.png?v=20260927-1508">
   <link rel="manifest" href="./manifest.webmanifest?v=20260927-1508">
-  <link rel="stylesheet" href="./styles.css?v=20261012-CATVIEW1">
+  <link rel="stylesheet" href="./styles.css?v=20261013-OFFLINE1">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -74,6 +74,9 @@
       </div>
     </header>
 
+    <div id="offlineBanner" class="offline-banner hidden" role="status" aria-live="polite">
+      <p id="offlineBannerText"></p>
+    </div>
     <div id="testModeBanner" class="test-mode-banner hidden">テスト環境｜10月・11月・12月のダミーデータです。本番DBには保存されません。</div>
     <main>
       <section class="screen active" data-screen="home">
@@ -83,7 +86,7 @@
             <small>まだ取り込んでいないカード</small>
             <ul id="importReminderList"></ul>
           </div>
-          <button id="importReminderButton" type="button">読み込む</button>
+          <button id="importReminderButton" type="button" data-online-only>読み込む</button>
         </article>
         <article id="paymentDueCard" class="payment-due-card">
           <div class="payment-due-head">
@@ -96,8 +99,8 @@
           <strong id="paymentDueAmount" class="payment-due-amount">—</strong>
           <p id="paymentDueDirection" class="payment-due-direction">読み込み中…</p>
           <p id="paymentDueMeta" class="payment-due-meta">データを読み込んでいます。</p>
-          <button id="payCurrentSettlementButton" class="payment-paid-button" type="button">払ったよー</button>
-          <button id="undoPaymentButton" class="payment-undo-button hidden" type="button">支払いを取り消す</button>
+          <button id="payCurrentSettlementButton" class="payment-paid-button" type="button" data-online-only>払ったよー</button>
+          <button id="undoPaymentButton" class="payment-undo-button hidden" type="button" data-online-only>支払いを取り消す</button>
         </article>
 
         <article class="settlement-card">
@@ -160,7 +163,7 @@
         <div id="ledgerListView">
           <div class="latest-import-card">
             <button id="latestImportSummary" type="button" class="latest-import-summary hidden"></button>
-            <button type="button" class="latest-import-action" data-open="csvImportDialog">
+            <button type="button" class="latest-import-action" data-open="csvImportDialog" data-online-only>
               <span class="latest-import-action-icon" aria-hidden="true">💳</span>
               <span class="latest-import-action-copy">カード明細を読み込む</span>
               <span class="latest-import-action-chevron" aria-hidden="true">›</span>
@@ -294,7 +297,7 @@
             </div>
             <div class="progress"><span id="debtProgress"></span></div>
             <p id="debtMeta">読み込み中…</p>
-            <button class="soft-button" type="button" data-open="repaymentDialog">返済額を変更</button>
+            <button class="soft-button" type="button" data-open="repaymentDialog" data-online-only>返済額を変更</button>
           </article>
         </section>
 
@@ -320,8 +323,8 @@
                 <span>今月払わず、翌月へ回す金額</span>
                 <div class="carryover-input-wrap"><b>¥</b><input id="livingCarryoverInput" type="number" min="0" step="1" inputmode="numeric" value="0"></div>
               </label>
-              <button class="soft-button" type="button" data-carryover="living">繰越額を保存</button>
-              <button id="cancelLivingCarryoverButton" class="carryover-cancel-button hidden" type="button">この繰越を取り消す</button>
+              <button class="soft-button" type="button" data-carryover="living" data-online-only>繰越額を保存</button>
+              <button id="cancelLivingCarryoverButton" class="carryover-cancel-button hidden" type="button" data-online-only>この繰越を取り消す</button>
             </article>
           </div>
         </section>
@@ -344,7 +347,7 @@
           </div>
 
           <div id="initialExpensesList" class="transaction-list"></div>
-          <button class="soft-button money-add-button" type="button" data-open-initial-expense>立替金を追加</button>
+          <button class="soft-button money-add-button" type="button" data-open-initial-expense data-online-only>立替金を追加</button>
         </section>
       </section>
 
@@ -354,18 +357,18 @@
           <p>費目・店舗ルール・負担割合を管理</p>
         </div>
         <div class="settings-card">
-          <button id="shareSettingsButton" type="button"><span><strong>共同費の基本負担</strong></span><b>›</b></button>
-          <button id="cardSettingsButton" type="button"><span><strong>カード</strong></span><b>›</b></button>
-          <button id="categorySettingsButton" type="button"><span><strong>費目</strong></span><b>›</b></button>
-          <button id="merchantSettingsButton" type="button"><span><strong>店舗ルール</strong></span><b>›</b></button>
-          <button id="auditHistoryButton" type="button"><span><strong>変更履歴</strong></span><b>›</b></button>
+          <button id="shareSettingsButton" type="button" data-online-only><span><strong>共同費の基本負担</strong></span><b>›</b></button>
+          <button id="cardSettingsButton" type="button" data-online-only><span><strong>カード</strong></span><b>›</b></button>
+          <button id="categorySettingsButton" type="button" data-online-only><span><strong>費目</strong></span><b>›</b></button>
+          <button id="merchantSettingsButton" type="button" data-online-only><span><strong>店舗ルール</strong></span><b>›</b></button>
+          <button id="auditHistoryButton" type="button" data-online-only><span><strong>変更履歴</strong></span><b>›</b></button>
           <a id="environmentLink" class="settings-link-row" href="./test/"><span><strong>テスト環境</strong></span><b>›</b></a>
-          <button id="logoutButton" type="button"><span><strong>ログアウト</strong></span><b>›</b></button>
+          <button id="logoutButton" type="button" data-online-only><span><strong>ログアウト</strong></span><b>›</b></button>
         </div>
 
         <div class="settings-section-head">
           <h3 class="section-title">店舗ルール</h3>
-          <button id="addMerchantRuleButton" class="settings-text-button" type="button">＋ 追加</button>
+          <button id="addMerchantRuleButton" class="settings-text-button" type="button" data-online-only>＋ 追加</button>
         </div>
         <div id="merchantRules" class="transaction-list"></div>
       </section>
@@ -616,6 +619,6 @@
   <script src="./config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="./boot.js?v=20261012-CATVIEW1"></script>
+  <script src="./boot.js?v=20261013-OFFLINE1"></script>
 </body>
 </html>

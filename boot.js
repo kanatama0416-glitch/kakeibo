@@ -3,10 +3,10 @@
 (function () {
   "use strict";
 
-  var VERSION = "20261012-CATVIEW1";
+  var VERSION = "20261013-OFFLINE1";
 
   // 画面に依存しない計算・判定（単体テストあり）。app.js より先に読み込む。
-  var LOGIC_SCRIPTS = ["./lib/core.js", "./lib/settlement.js", "./lib/split.js", "./lib/card-import.js", "./lib/category-view.js"].map(function (src) {
+  var LOGIC_SCRIPTS = ["./lib/core.js", "./lib/settlement.js", "./lib/split.js", "./lib/card-import.js", "./lib/category-view.js", "./lib/offline.js"].map(function (src) {
     return src + "?v=" + VERSION;
   });
 
@@ -17,7 +17,7 @@
       ].concat(LOGIC_SCRIPTS, [
         "./split-editor.js?v=" + VERSION,
         "./app.js?v=" + VERSION,
-        "./auth.js?v=20260927-INTEGRITY1"
+        "./auth.js?v=" + VERSION
       ]),
       startApp: false
     },
@@ -79,8 +79,37 @@
   window.KAKEIBO_TEST_MODE = mode === "test";
   if (mode === "test") applyTestModeScreen(env);
 
+  // オフライン起動用の Service Worker（sw.js）。画面が読み込んだ部品を保存させる。
+  // 登録できない環境（古いブラウザ・プライベートモード等）でも、アプリはこれまでどおり動く。
+  function resourceUrls() {
+    var urls = [];
+    function add(value) {
+      if (value && /^https?:/.test(value) && urls.indexOf(value) === -1) urls.push(value);
+    }
+    Array.prototype.forEach.call(document.scripts, function (script) { add(script.src); });
+    Array.prototype.forEach.call(document.querySelectorAll("link[href]"), function (link) { add(link.href); });
+    Array.prototype.forEach.call(document.images, function (img) { add(img.currentSrc || img.src); });
+    if (window.performance && performance.getEntriesByType) {
+      performance.getEntriesByType("resource").forEach(function (entry) {
+        if (entry.initiatorType === "css" || entry.initiatorType === "img") add(entry.name);
+      });
+    }
+    return urls;
+  }
+
+  function registerServiceWorker() {
+    if (!("serviceWorker" in navigator) || !window.isSecureContext) return;
+    navigator.serviceWorker.register("./sw.js?v=" + VERSION)
+      .then(function () { return navigator.serviceWorker.ready; })
+      .then(function (registration) {
+        if (registration.active) registration.active.postMessage({ type: "cache-urls", urls: resourceUrls() });
+      })
+      .catch(function (error) { console.warn("オフライン用の保存を準備できませんでした。", error); });
+  }
+
   loadInOrder(env.scripts)
     .then(function () {
+      registerServiceWorker();
       if (env.startApp) return window.KakeiboApp.start();
     })
     .catch(function (error) {
