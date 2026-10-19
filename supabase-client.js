@@ -87,7 +87,7 @@
 
     while (true) {
       var result = await client.from("transactions")
-        .select("id,transaction_date,settlement_month,merchant_name,merchant_raw,amount,scope,payer,me_share_amount,status,source,memo,is_demo,card_provider,card_label,card_id,import_batch_id,created_at,categories(name)")
+        .select("id,transaction_date,settlement_month,merchant_name,merchant_raw,amount,scope,payer,me_share_amount,status,source,memo,is_demo,card_provider,card_label,card_id,import_batch_id,recurring_expense_id,created_at,categories(name)")
         .eq("is_demo", false)
         .order("transaction_date", { ascending:false })
         .order("id", { ascending:false })
@@ -140,7 +140,11 @@
         .order("created_at", { ascending:false }),
       client.from("import_batches")
         .select("id,uploader_user_id,uploader_email,uploaded_at,target_month,card_id,file_name,source_format,read_count,imported_count,duplicate_count,error_count,total_amount,created_at")
-        .order("uploaded_at", { ascending:false })
+        .order("uploaded_at", { ascending:false }),
+      client.from("recurring_expenses")
+        .select(RECURRING_COLUMNS)
+        .order("day_of_month", { ascending:true })
+        .order("id", { ascending:true })
     ]);
 
     results.forEach(function (r, index) {
@@ -187,6 +191,8 @@
           card_label:t.card_label,
           card_id:t.card_id,
           import_batch_id:t.import_batch_id,
+          // 毎月の固定費から自動で入れた支出なら、元の固定費の id。
+          recurring_expense_id:t.recurring_expense_id == null ? null : Number(t.recurring_expense_id),
           created_at:t.created_at
         };
       }),
@@ -243,8 +249,78 @@
       }),
       cards: results[10].data || [],
       import_batches: results[11].data || [],
+      recurring_expenses: (results[12].data || []).map(mapRecurringExpense),
       members: members
     };
+  }
+
+  // ---------- 毎月の固定費 ----------
+  var RECURRING_COLUMNS = "id,name,amount,day_of_month,scope,payer,me_share_amount,memo,start_month,last_generated_month,active,created_at,updated_at,categories(name)";
+
+  function mapRecurringExpense(r) {
+    return {
+      id:r.id,
+      name:r.name,
+      amount:Number(r.amount),
+      day_of_month:Number(r.day_of_month),
+      category_name:categoryName(r),
+      scope:r.scope,
+      payer:r.payer,
+      me_share_amount:r.me_share_amount == null ? null : Number(r.me_share_amount),
+      memo:r.memo || "",
+      start_month:r.start_month,
+      last_generated_month:r.last_generated_month,
+      active:r.active !== false,
+      created_at:r.created_at,
+      updated_at:r.updated_at
+    };
+  }
+
+  // 固定費の追加・変更。id があれば変更（開始月は変えない）。入力は lib/recurring.js の validate() と同じ形。
+  async function saveRecurringExpense(input) {
+    var error = window.KakeiboRecurring.validate(input);
+    if (error) throw new Error("固定費の入力を確認してください。（" + error + "）");
+
+    var categoryId = null;
+    if (input.category_name) {
+      var categoryResult = await client.from("categories")
+        .select("id").eq("name", input.category_name).limit(1);
+      if (categoryResult.error) throw categoryResult.error;
+      categoryId = categoryResult.data[0] ? categoryResult.data[0].id : null;
+    }
+
+    var payload = {
+      name:window.KakeiboCore.normalizeText(input.name),
+      amount:Number(input.amount),
+      day_of_month:Number(input.day_of_month),
+      category_id:categoryId,
+      scope:input.scope,
+      payer:input.payer,
+      me_share_amount:input.scope === "shared" && input.me_share_amount != null ? Number(input.me_share_amount) : null,
+      memo:String(input.memo || "").trim() || null,
+      active:input.active !== false
+    };
+
+    var result = input.id
+      ? await client.from("recurring_expenses").update(payload).eq("id", Number(input.id)).select(RECURRING_COLUMNS).single()
+      : await client.from("recurring_expenses")
+          .insert(Object.assign({ start_month:input.start_month + "-01" }, payload))
+          .select(RECURRING_COLUMNS).single();
+    if (result.error) throw result.error;
+    return mapRecurringExpense(result.data);
+  }
+
+  // 固定費を消す。これまでに入れた支出は明細に残る（元の固定費との対応だけ外れる）。
+  async function deleteRecurringExpense(id) {
+    var result = await client.from("recurring_expenses").delete().eq("id", Number(id));
+    if (result.error) throw result.error;
+  }
+
+  // 開始月〜今月のまだ入れていない月の支出を入れる。入れた件数を返す。
+  async function generateRecurringExpenses() {
+    var result = await client.rpc("kakeibo_generate_recurring_expenses");
+    if (result.error) throw result.error;
+    return Number(result.data || 0);
   }
 
   function normalizeMerchantKey(value) {
@@ -786,6 +862,9 @@
     updateCard: updateCard,
     deleteCard: deleteCard,
     markSettlementPaid: markSettlementPaid,
-    undoSettlementPaid: undoSettlementPaid
+    undoSettlementPaid: undoSettlementPaid,
+    saveRecurringExpense: saveRecurringExpense,
+    deleteRecurringExpense: deleteRecurringExpense,
+    generateRecurringExpenses: generateRecurringExpenses
   };
 })();

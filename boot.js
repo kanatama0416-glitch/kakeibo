@@ -3,10 +3,10 @@
 (function () {
   "use strict";
 
-  var VERSION = "20261013-OFFLINE1";
+  var VERSION = "20261019-RECUR1";
 
   // 画面に依存しない計算・判定（単体テストあり）。app.js より先に読み込む。
-  var LOGIC_SCRIPTS = ["./lib/core.js", "./lib/settlement.js", "./lib/split.js", "./lib/card-import.js", "./lib/category-view.js", "./lib/offline.js"].map(function (src) {
+  var LOGIC_SCRIPTS = ["./lib/core.js", "./lib/settlement.js", "./lib/split.js", "./lib/card-import.js", "./lib/category-view.js", "./lib/offline.js", "./lib/recurring.js"].map(function (src) {
     return src + "?v=" + VERSION;
   });
 
@@ -16,6 +16,7 @@
         "./supabase-client.js?v=" + VERSION
       ].concat(LOGIC_SCRIPTS, [
         "./split-editor.js?v=" + VERSION,
+        "./recurring-settings.js?v=" + VERSION,
         "./app.js?v=" + VERSION,
         "./auth.js?v=" + VERSION
       ]),
@@ -26,6 +27,7 @@
         "./test/test-db.js?v=" + VERSION
       ].concat(LOGIC_SCRIPTS, [
         "./split-editor.js?v=" + VERSION,
+        "./recurring-settings.js?v=" + VERSION,
         "./app.js?v=" + VERSION
       ]),
       startApp: true,

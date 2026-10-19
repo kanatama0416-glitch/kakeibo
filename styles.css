@@ -688,3 +688,15 @@ html,body,.app-shell{max-width:100%;overflow-x:hidden}
 .app-shell.is-offline [data-online-only],.app-shell.is-offline [data-edit-tx] .tx-edit-label,.app-shell.is-offline [data-edit-merchant-rule]{opacity:.45}
 .transaction-row.is-pending{border-style:dashed;background:#fffdf5}
 .transaction-row.is-pending .tx-edit-label{color:#8a6a00}
+
+/* 毎月の固定費（設定） */
+#recurringList{display:grid;gap:8px;margin-top:4px}
+.recurring-row.is-paused{opacity:.62}
+.recurring-row > div{min-width:0}
+.recurring-row strong{overflow-wrap:anywhere}
+.recurring-status{display:inline-block;margin-top:5px;padding:2px 8px;border-radius:999px;background:var(--warning-soft);color:var(--warning);font-size:11px;font-weight:800}
+.recurring-notice{margin:0 0 10px;padding:9px 12px;border-radius:12px;background:var(--green-soft);color:var(--green);font-size:13px;font-weight:700}
+.recurring-add-button{width:100%;margin-top:12px}
+.recurring-field-help{margin:-4px 0 4px}
+.recurring-active{display:flex;align-items:center;gap:8px;font-weight:700}
+.recurring-active input{width:auto;margin:0}

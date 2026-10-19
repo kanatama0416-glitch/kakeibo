@@ -343,7 +343,8 @@
       monthly_carryovers:"翌月への繰越",
       app_settings:"共同費の基本負担",
       monthly_settlements:"支払い済み記録",
-      monthly_repayment_amounts:"月ごとの返済額"
+      monthly_repayment_amounts:"月ごとの返済額",
+      recurring_expenses:"毎月の固定費"
     };
     return labels[tableName] || tableName || "データ";
   }
@@ -379,7 +380,12 @@
       source:"取込元",
       card_provider:"カード会社",
       card_label:"カード名",
-      icon:"絵文字"
+      icon:"絵文字",
+      day_of_month:"毎月何日",
+      start_month:"開始月",
+      last_generated_month:"明細に入れ終わった月",
+      active:"毎月入れる",
+      name:"名前"
     };
     return labels[field] || field;
   }
@@ -428,6 +434,9 @@
       return (row.repayment_month ? fullMonthLabel(String(row.repayment_month).slice(0,7)) : "") + "の返済";
     }
     if (log.table_name === "app_settings") return "共同費の基本負担";
+    if (log.table_name === "recurring_expenses") {
+      return "毎月の固定費「" + (row.name || "") + "」" + (row.amount != null ? " " + yen(row.amount) : "");
+    }
     if (log.table_name === "loans") return row.description || "貸し借り";
     return "ID " + (log.record_id || "-");
   }
@@ -1804,6 +1813,7 @@
   }
 
   function sourceDisplay(tx) {
+    if (tx.recurring_expense_id) return "毎月の固定費";
     if (tx.source === "manual") return "手入力";
     var card = cardForId(tx.card_id);
     if (card) return cardDisplay(card);
@@ -4152,6 +4162,19 @@
   createSplitEditor("manual", "manualExpenseSplit", "manualExpenseAmount", "manualExpenseRuleMode");
   createSplitEditor("classify", "classifySplit", "classifyAmount", "ruleMode");
 
+  // 設定 →「毎月の固定費」（recurring-settings.js）。
+  window.KakeiboRecurringSettings.create({
+    db:function () { return window.kakeiboDb; },
+    data:function () { return state.data; },
+    memberName:memberName,
+    settings:function () { return (state.data && state.data.settings) || null; },
+    currentMonth:actualMonthKey,
+    reload:async function () {
+      await reloadData();
+      render();
+    }
+  });
+
   var manualExpenseNameInput = document.getElementById("manualExpenseName");
   var manualExpenseMerchantSuggestions = document.getElementById("manualExpenseMerchantSuggestions");
 
@@ -4395,6 +4418,10 @@
       } catch (error) {
         // 通信できないときは、最後に読み込んだデータで起動する（閲覧と支出の追加だけできる）。
         if (!window.KakeiboOffline.isNetworkError(error, navigator.onLine) || !useOfflineSnapshot()) throw error;
+      }
+      // まだ入れていない月の固定費（家賃など）を明細に入れる。入れたら読み直す。
+      if (!state.offlineMode && await window.KakeiboRecurringSettings.generateOnStart(window.kakeiboDb) > 0) {
+        await reloadData();
       }
       // 前回「送信エラー」になった支出も、起動のたびに一度送り直す（一時的な障害だった場合に届くように）。
       offlineStore.clearErrors();
