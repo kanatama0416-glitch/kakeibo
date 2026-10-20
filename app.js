@@ -3041,6 +3041,7 @@
     document.getElementById("initialExpenseMemo").value = expense.memo || "";
     document.getElementById("initialExpenseSaveButton").textContent = "変更を保存";
     document.getElementById("deleteInitialExpenseButton").classList.remove("hidden");
+    document.getElementById("moveToTransactionButton").classList.remove("hidden");
     document.getElementById("initialExpenseDialog").showModal();
   }
 
@@ -3050,6 +3051,7 @@
     document.getElementById("initialExpenseDialogTitle").textContent = "立替金を追加";
     document.getElementById("initialExpenseSaveButton").textContent = "保存する";
     document.getElementById("deleteInitialExpenseButton").classList.add("hidden");
+    document.getElementById("moveToTransactionButton").classList.add("hidden");
     setDefaultEntryDates(true);
     document.getElementById("initialExpenseDialog").showModal();
   }
@@ -4162,6 +4164,23 @@
   createSplitEditor("manual", "manualExpenseSplit", "manualExpenseAmount", "manualExpenseRuleMode");
   createSplitEditor("classify", "classifySplit", "classifyAmount", "ruleMode");
 
+  // 明細 ⇄ 立替金（毎月返していく立替）を移す（move-expense-dialogs.js）。
+  window.KakeiboMoveExpenseDialogs.create({
+    db:function () { return window.kakeiboDb; },
+    data:function () { return state.data; },
+    memberName:memberName,
+    settings:function () { return (state.data && state.data.settings) || null; },
+    isSettledMonth:function (monthKey) { return !!paidSettlementRecord(monthKey); },
+    txSettlementMonth:txSettlementMonth,
+    monthLabel:monthLabel,
+    operationStartMonth:OPERATION_START_MONTH,
+    reload:async function () {
+      await reloadData();
+      render();
+    },
+    goTo:function (screen) { go(screen); }
+  });
+
   // 設定 →「毎月の固定費」（recurring-settings.js）。
   window.KakeiboRecurringSettings.create({
     db:function () { return window.kakeiboDb; },
@@ -4318,6 +4337,7 @@
       document.getElementById("initialExpenseForm").reset();
       document.getElementById("initialExpenseId").value = "";
       document.getElementById("deleteInitialExpenseButton").classList.add("hidden");
+      document.getElementById("moveToTransactionButton").classList.add("hidden");
       setDefaultEntryDates();
       document.getElementById("initialExpenseDialog").close();
       render();

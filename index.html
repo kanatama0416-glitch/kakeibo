@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=20260927-1508">
   <link rel="icon" type="image/png" href="./apple-touch-icon.png?v=20260927-1508">
   <link rel="manifest" href="./manifest.webmanifest?v=20260927-1508">
-  <link rel="stylesheet" href="./styles.css?v=20261019-RECUR1">
+  <link rel="stylesheet" href="./styles.css?v=20261020-MOVE1">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -509,6 +509,7 @@
         </select>
       </label>
       <button class="primary-button" value="save">保存</button>
+      <button id="moveToInitialExpenseButton" class="soft-button move-expense-button" type="button" data-online-only>立替金（毎月返す）に移す</button>
       <button id="deleteTransactionButton" class="danger-button" type="button">この明細を削除</button>
     </form>
   </dialog>
@@ -551,7 +552,20 @@
       <label>日付<input id="initialExpenseDate" type="date" required></label>
       <label>メモ<input id="initialExpenseMemo" type="text" placeholder="任意"></label>
       <button id="initialExpenseSaveButton" class="primary-button" value="save">保存する</button>
+      <button id="moveToTransactionButton" class="soft-button move-expense-button hidden" type="button" data-online-only>通常の支出に戻す</button>
       <button id="deleteInitialExpenseButton" class="danger-button hidden" type="button">この立替金を削除</button>
+    </form>
+  </dialog>
+
+  <dialog id="moveToTransactionDialog">
+    <form class="dialog-card" id="moveToTransactionForm">
+      <div class="dialog-head"><h3>通常の支出に戻す</h3><button type="button" data-close-dialog>×</button></div>
+      <p id="moveToTransactionSummary" class="settings-help"></p>
+      <input id="moveToTransactionAmount" type="hidden">
+      <label>費目<select id="moveToTransactionCategory" required></select></label>
+      <div id="moveToTransactionSplit" class="split-editor"></div>
+      <p class="settings-help">立替金からは消え、この内容で明細に入ります。日付・名前・金額は明細の編集画面であとから直せます。</p>
+      <button id="moveToTransactionSaveButton" class="primary-button" type="submit">明細に戻す</button>
     </form>
   </dialog>
 
@@ -650,6 +664,6 @@
   <script src="./config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="./boot.js?v=20261019-RECUR1"></script>
+  <script src="./boot.js?v=20261020-MOVE1"></script>
 </body>
 </html>
