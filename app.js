@@ -343,7 +343,8 @@
       monthly_carryovers:"翌月への繰越",
       app_settings:"共同費の基本負担",
       monthly_settlements:"支払い済み記録",
-      monthly_repayment_amounts:"月ごとの返済額"
+      monthly_repayment_amounts:"月ごとの返済額",
+      recurring_expenses:"毎月の定額"
     };
     return labels[tableName] || tableName || "データ";
   }
@@ -1804,6 +1805,7 @@
   }
 
   function sourceDisplay(tx) {
+    if (tx.recurring_expense_id) return "定額";
     if (tx.source === "manual") return "手入力";
     var card = cardForId(tx.card_id);
     if (card) return cardDisplay(card);
@@ -2522,6 +2524,19 @@
     state.snapshotSavedAt = savedAt;
     offlineStore.saveSnapshot(data, savedAt);
     rebuildData();
+  }
+
+  // 毎月の定額から今月までの明細を DB で作る（同じ定額・同じ月は1件だけ）。作ったら読み直す。
+  // 失敗しても起動・操作は続ける（次に開いたときに作られる）。
+  async function applyRecurringExpenses() {
+    try {
+      var inserted = await window.kakeiboDb.applyRecurringExpenses();
+      if (inserted > 0) await reloadData();
+      return inserted;
+    } catch (error) {
+      console.warn("毎月の定額を明細に入れられませんでした。", error);
+      return 0;
+    }
   }
 
   function useOfflineSnapshot() {
@@ -3442,6 +3457,19 @@
   document.getElementById("categorySettingsButton").addEventListener("click", function () {
     document.getElementById("categorySettingsDialog").showModal();
   });
+  var recurringUi = window.KakeiboRecurringUi.create({
+    getData:function () { return state.data; },
+    memberName:memberName,
+    categoryIcon:categoryIcon,
+    currentMonth:defaultMonthKey,
+    minMonth:OPERATION_START_MONTH,
+    afterChange:async function () {
+      await reloadData();
+      await applyRecurringExpenses();
+      render();
+    }
+  });
+  document.getElementById("recurringSettingsButton").addEventListener("click", recurringUi.open);
   document.getElementById("merchantSettingsButton").addEventListener("click", openMerchantRuleAdd);
   document.getElementById("addMerchantRuleButton").addEventListener("click", openMerchantRuleAdd);
   document.getElementById("auditHistoryButton").addEventListener("click", openAuditHistory);
@@ -4396,6 +4424,7 @@
         // 通信できないときは、最後に読み込んだデータで起動する（閲覧と支出の追加だけできる）。
         if (!window.KakeiboOffline.isNetworkError(error, navigator.onLine) || !useOfflineSnapshot()) throw error;
       }
+      if (!state.offlineMode) await applyRecurringExpenses();
       // 前回「送信エラー」になった支出も、起動のたびに一度送り直す（一時的な障害だった場合に届くように）。
       offlineStore.clearErrors();
       rebuildData();

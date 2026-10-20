@@ -688,3 +688,10 @@ html,body,.app-shell{max-width:100%;overflow-x:hidden}
 .app-shell.is-offline [data-online-only],.app-shell.is-offline [data-edit-tx] .tx-edit-label,.app-shell.is-offline [data-edit-merchant-rule]{opacity:.45}
 .transaction-row.is-pending{border-style:dashed;background:#fffdf5}
 .transaction-row.is-pending .tx-edit-label{color:#8a6a00}
+
+/* 設定 > 毎月の定額 */
+.recurring-list{margin:4px 0 12px}
+.recurring-row.is-paused{opacity:.55}
+.dialog-card label.checkbox-row{display:flex;align-items:center;gap:8px;color:var(--text);font-size:14px}
+.dialog-card .checkbox-row input[type="checkbox"]{width:20px;height:20px;margin:0;padding:0;border:0;flex:0 0 auto;accent-color:var(--green)}
+.dialog-card input[type=month]{display:block;min-width:0;max-width:100%;-webkit-appearance:none;appearance:none;text-align:left}

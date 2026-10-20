@@ -34,7 +34,7 @@ var SECRET_PATTERNS = [
 var SECRET_SCAN_EXTENSIONS = [".js", ".html", ".css"];
 
 // CLAUDE.md のキャッシュ切り替えルール：これらを変えたら boot.js の VERSION と index.html の boot.js?v= を更新する。
-var BOOT_VERSION_TRIGGERS = ["app.js", "supabase-client.js", "test/test-db.js"];
+var BOOT_VERSION_TRIGGERS = ["app.js", "supabase-client.js", "test/test-db.js", "recurring-ui.js"];
 
 // ---------- 純粋関数（単体テスト対象） ----------
 

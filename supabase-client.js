@@ -87,7 +87,7 @@
 
     while (true) {
       var result = await client.from("transactions")
-        .select("id,transaction_date,settlement_month,merchant_name,merchant_raw,amount,scope,payer,me_share_amount,status,source,memo,is_demo,card_provider,card_label,card_id,import_batch_id,created_at,categories(name)")
+        .select("id,transaction_date,settlement_month,merchant_name,merchant_raw,amount,scope,payer,me_share_amount,status,source,memo,is_demo,card_provider,card_label,card_id,import_batch_id,recurring_expense_id,created_at,categories(name)")
         .eq("is_demo", false)
         .order("transaction_date", { ascending:false })
         .order("id", { ascending:false })
@@ -140,7 +140,11 @@
         .order("created_at", { ascending:false }),
       client.from("import_batches")
         .select("id,uploader_user_id,uploader_email,uploaded_at,target_month,card_id,file_name,source_format,read_count,imported_count,duplicate_count,error_count,total_amount,created_at")
-        .order("uploaded_at", { ascending:false })
+        .order("uploaded_at", { ascending:false }),
+      client.from("recurring_expenses")
+        .select("id,name,amount,scope,payer,me_share_amount,day_of_month,start_month,last_generated_month,is_active,memo,categories(name)")
+        .order("day_of_month", { ascending:true })
+        .order("id", { ascending:true })
     ]);
 
     results.forEach(function (r, index) {
@@ -187,6 +191,7 @@
           card_label:t.card_label,
           card_id:t.card_id,
           import_batch_id:t.import_batch_id,
+          recurring_expense_id:t.recurring_expense_id == null ? null : Number(t.recurring_expense_id),
           created_at:t.created_at
         };
       }),
@@ -243,6 +248,22 @@
       }),
       cards: results[10].data || [],
       import_batches: results[11].data || [],
+      recurring_expenses: (results[12].data || []).map(function (r) {
+        return {
+          id:Number(r.id),
+          name:r.name,
+          amount:Number(r.amount),
+          category_name:categoryName(r),
+          scope:r.scope,
+          payer:r.payer,
+          me_share_amount:r.me_share_amount == null ? null : Number(r.me_share_amount),
+          day_of_month:Number(r.day_of_month),
+          start_month:r.start_month,
+          last_generated_month:r.last_generated_month,
+          is_active:r.is_active !== false,
+          memo:r.memo
+        };
+      }),
       members: members
     };
   }
@@ -589,6 +610,49 @@
     return result.data;
   }
 
+  // 毎月の定額。id があれば更新、なければ追加。すでに作った月の明細は変えない。
+  async function saveRecurringExpense(input) {
+    var error = window.KakeiboRecurring.validate(input);
+    if (error) throw new Error("毎月の定額の入力を確認してください。");
+    var categoryResult = await client.from("categories")
+      .select("id").eq("name", input.category_name).limit(1);
+    if (categoryResult.error) throw categoryResult.error;
+    var categoryId = categoryResult.data[0] ? categoryResult.data[0].id : null;
+    if (!categoryId) throw new Error("費目を選んでください。");
+
+    var fields = {
+      name:String(input.name).trim(),
+      amount:Number(input.amount),
+      category_id:categoryId,
+      scope:input.scope,
+      payer:input.payer,
+      me_share_amount:splitAmountFor(input),
+      day_of_month:Number(input.day_of_month),
+      start_month:String(input.start_month).slice(0, 7) + "-01",
+      is_active:input.is_active !== false,
+      memo:input.memo ? String(input.memo).trim() : null
+    };
+    var query = input.id
+      ? client.from("recurring_expenses").update(fields).eq("id", Number(input.id))
+      : client.from("recurring_expenses").insert(fields);
+    var result = await query.select("id").single();
+    if (result.error) throw result.error;
+    return result.data;
+  }
+
+  // 定額を消しても、作り済みの明細は残る（recurring_expense_id は null になる）。
+  async function deleteRecurringExpense(id) {
+    var result = await client.from("recurring_expenses").delete().eq("id", Number(id));
+    if (result.error) throw result.error;
+  }
+
+  // 今月（日本時間）までの定額の明細を DB で作る。作った件数を返す。
+  async function applyRecurringExpenses() {
+    var result = await client.rpc("kakeibo_apply_recurring_expenses");
+    if (result.error) throw result.error;
+    return Number(result.data || 0);
+  }
+
   async function addCategory(name, icon) {
     var value = String(name || "").trim();
     var iconValue = String(icon || "").trim() || null;
@@ -786,6 +850,9 @@
     updateCard: updateCard,
     deleteCard: deleteCard,
     markSettlementPaid: markSettlementPaid,
-    undoSettlementPaid: undoSettlementPaid
+    undoSettlementPaid: undoSettlementPaid,
+    saveRecurringExpense: saveRecurringExpense,
+    deleteRecurringExpense: deleteRecurringExpense,
+    applyRecurringExpenses: applyRecurringExpenses
   };
 })();

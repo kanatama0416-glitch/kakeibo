@@ -64,6 +64,7 @@
       { member_key:"me", display_name:"にゃち", email:"me@example.com" },
       { member_key:"partner", display_name:"うー", email:"partner@example.com" }
     ],
+    recurring_expenses: [],
     import_batches: [
       { id:2, uploader_user_id:"test-partner", uploader_email:"partner@example.com", uploaded_at:"2026-10-12T12:18:00.000Z", target_month:"2026-10-01", card_id:2, file_name:"epos_202610.pdf", source_format:"pdf", read_count:12, imported_count:10, duplicate_count:1, error_count:1, total_amount:48320, created_at:"2026-10-12T12:18:00.000Z" },
       { id:1, uploader_user_id:"test-me", uploader_email:"me@example.com", uploaded_at:"2026-10-03T00:42:00.000Z", target_month:"2026-10-01", card_id:1, file_name:"rakuten_202610.csv", source_format:"csv", read_count:9, imported_count:8, duplicate_count:1, error_count:0, total_amount:32180, created_at:"2026-10-03T00:42:00.000Z" }
@@ -71,7 +72,9 @@
   };
 
   var auditLogs = [];
-  var ids = { transaction:1000, initial:100, category:100, rule:100, carry:100, settlement:100, repaymentAmount:100, repayment:100, card:10, batch:10 };
+  var ids = { transaction:1000, initial:100, category:100, rule:100, carry:100, settlement:100, repaymentAmount:100, repayment:100, card:10, batch:10, recurring:10 };
+  // テスト環境の「今日」（app.js の actualMonthKey と同じ 2026年12月）。
+  var TEST_CURRENT_MONTH = "2026-12";
 
   function now() { return new Date().toISOString(); }
   function monthFirst(month) { return month + "-01"; }
@@ -252,6 +255,40 @@
   }
 
   // テスト環境でも通信が切れた状態を再現する（端末をオフラインにすると、本番の通信失敗と同じ形の失敗を返す）。
+  // 本番の DB 関数（kakeibo_apply_recurring_expenses）と同じ規則で、定額の明細を作る。
+  async function applyRecurringExpenses() {
+    var inserted = 0;
+    data.recurring_expenses.forEach(function (template) {
+      var months = window.KakeiboRecurring.monthsToGenerate(template, TEST_CURRENT_MONTH);
+      window.KakeiboRecurring.transactionsToGenerate(template, TEST_CURRENT_MONTH).forEach(function (fields) {
+        var exists = data.transactions.some(function (x) {
+          return x.recurring_expense_id === fields.recurring_expense_id && x.recurring_month === fields.recurring_month;
+        });
+        if (exists) return;
+        var row = Object.assign({ id:++ids.transaction, settlement_month:settlementMonthFor(fields.date), source:"manual" }, fields);
+        data.transactions.push(row); log("INSERT","transactions",row.id,null,clone(row)); inserted++;
+      });
+      if (months.length) template.last_generated_month = monthFirst(TEST_CURRENT_MONTH);
+    });
+    return inserted;
+  }
+  async function saveRecurringExpense(input) {
+    if (window.KakeiboRecurring.validate(input)) throw new Error("毎月の定額の入力を確認してください。");
+    var fields = { name:String(input.name).trim(), amount:Number(input.amount), category_name:input.category_name, scope:input.scope, payer:input.payer,
+      me_share_amount:input.scope==="shared"&&input.me_share_amount!=null?Number(input.me_share_amount):null, day_of_month:Number(input.day_of_month),
+      start_month:String(input.start_month).slice(0,7)+"-01", is_active:input.is_active!==false, memo:input.memo||null };
+    var row = input.id ? data.recurring_expenses.find(function(x){return Number(x.id)===Number(input.id);}) : null;
+    if (row) { var before=clone(row); Object.assign(row, fields); log("UPDATE","recurring_expenses",row.id,before,clone(row)); }
+    else { row = Object.assign({ id:++ids.recurring, last_generated_month:null }, fields); data.recurring_expenses.push(row); log("INSERT","recurring_expenses",row.id,null,clone(row)); }
+    return { id:row.id };
+  }
+  async function deleteRecurringExpense(id) {
+    var i=data.recurring_expenses.findIndex(function(x){return Number(x.id)===Number(id);});
+    if (i<0) return;
+    var before=data.recurring_expenses[i]; data.recurring_expenses.splice(i,1); log("DELETE","recurring_expenses",id,clone(before),null);
+    data.transactions.forEach(function(x){ if(Number(x.recurring_expense_id)===Number(id)) x.recurring_expense_id=null; });
+  }
+
   function networkFailure() {
     return { message:"TypeError: Failed to fetch", details:"テスト環境：オフライン", hint:"", code:"" };
   }
@@ -279,7 +316,10 @@
     updateCard:updateCard,
     deleteCard:deleteCard,
     markSettlementPaid:markSettlementPaid,
-    undoSettlementPaid:undoSettlementPaid
+    undoSettlementPaid:undoSettlementPaid,
+    saveRecurringExpense:saveRecurringExpense,
+    deleteRecurringExpense:deleteRecurringExpense,
+    applyRecurringExpenses:applyRecurringExpenses
   };
 
   window.kakeiboDb = {};

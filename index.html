@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=20260927-1508">
   <link rel="icon" type="image/png" href="./apple-touch-icon.png?v=20260927-1508">
   <link rel="manifest" href="./manifest.webmanifest?v=20260927-1508">
-  <link rel="stylesheet" href="./styles.css?v=20261013-OFFLINE1">
+  <link rel="stylesheet" href="./styles.css?v=20261020-RECURRING1">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -360,6 +360,7 @@
           <button id="shareSettingsButton" type="button" data-online-only><span><strong>共同費の基本負担</strong></span><b>›</b></button>
           <button id="cardSettingsButton" type="button" data-online-only><span><strong>カード</strong></span><b>›</b></button>
           <button id="categorySettingsButton" type="button" data-online-only><span><strong>費目</strong></span><b>›</b></button>
+          <button id="recurringSettingsButton" type="button" data-online-only><span><strong>毎月の定額</strong></span><b>›</b></button>
           <button id="merchantSettingsButton" type="button" data-online-only><span><strong>店舗ルール</strong></span><b>›</b></button>
           <button id="auditHistoryButton" type="button" data-online-only><span><strong>変更履歴</strong></span><b>›</b></button>
           <a id="environmentLink" class="settings-link-row" href="./test/"><span><strong>テスト環境</strong></span><b>›</b></a>
@@ -419,6 +420,33 @@
       </form>
       <div id="categorySettingsList" class="settings-manage-list"></div>
     </div>
+  </dialog>
+
+  <dialog id="recurringDialog">
+    <div class="dialog-card settings-dialog-scroll">
+      <div class="dialog-head"><h3>毎月の定額</h3><button type="button" data-close-dialog>×</button></div>
+      <p class="settings-help">家賃など毎月同じ支出を登録すると、毎月1日以降にアプリを開いたとき、その月の分が明細に自動で入ります（日付は指定した日）。カード払いのものはカード明細の取込で入るので、ここには登録しないでください。</p>
+      <div id="recurringList" class="transaction-list recurring-list"></div>
+      <button id="recurringAddButton" class="primary-button" type="button">＋ 定額を追加</button>
+    </div>
+  </dialog>
+
+  <dialog id="recurringEditDialog">
+    <form class="dialog-card settings-dialog-scroll" id="recurringForm" novalidate>
+      <div class="dialog-head"><h3 id="recurringFormTitle">毎月の定額を追加</h3><button type="button" data-close-dialog>×</button></div>
+      <input id="recurringId" type="hidden">
+      <label>内容<input id="recurringName" type="text" maxlength="100" placeholder="例：家賃" required></label>
+      <label>金額<input id="recurringAmount" type="number" step="1" inputmode="numeric" placeholder="80000" required></label>
+      <label>費目<select id="recurringCategory" required></select></label>
+      <label>毎月の日付<select id="recurringDay"></select></label>
+      <label>開始月<input id="recurringStartMonth" type="month" required></label>
+      <div id="recurringSplit" class="split-editor"></div>
+      <label>メモ<input id="recurringMemo" type="text" maxlength="200" placeholder="任意"></label>
+      <label id="recurringActiveRow" class="checkbox-row hidden"><input id="recurringActive" type="checkbox"> 毎月自動で明細に入れる（外すと停止）</label>
+      <p id="recurringEditNote" class="settings-help hidden">変更は次に明細を作る月から反映します。すでに明細に入った分は、明細一覧から直してください。</p>
+      <button class="primary-button" type="submit">保存する</button>
+      <button id="deleteRecurringButton" class="danger-button hidden" type="button">この定額を削除</button>
+    </form>
   </dialog>
 
   <dialog id="merchantRuleDialog">
@@ -619,6 +647,6 @@
   <script src="./config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="./boot.js?v=20261013-OFFLINE1"></script>
+  <script src="./boot.js?v=20261020-RECURRING1"></script>
 </body>
 </html>
